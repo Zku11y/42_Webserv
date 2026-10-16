@@ -1,0 +1,95 @@
+#include "server.hpp"
+#include <fcntl.h>
+#include <map>
+#include <sys/poll.h>
+#include <sys/socket.h>
+#include <vector>
+
+int set_non_blocking(int fd){
+  int flags = fcntl(fd, F_GETFL, 0);
+  if(flags < 0)
+    return(std::cerr << "Error: fcntl(F_GETFL) failed", 0);
+
+  if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)      
+    return(std::cerr << "Error: fcntl(F_SETFL) failed", 0);
+
+  return 1;
+}
+
+int main(){
+
+  int listenFd = socket(AF_INET, SOCK_STREAM, 0);
+  if (listenFd < 0)
+    return (std::cerr << "Error: couldn't create listening socket\n", 1);
+
+  sockaddr_in address = {};
+  address.sin_addr.s_addr = htonl(SK_IP);
+  address.sin_port = htons(SK_PORT);
+  address.sin_family = AF_INET;
+
+  if(!set_non_blocking(listenFd))
+    return (1);
+
+  if(bind(listenFd, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0)
+    return(std::cerr << "Error: couldn't bind socket to address and port\n", close(listenFd), 1);
+
+  if(listen(listenFd, BACKLOG_MAX) < 0)
+    return(std::cerr << "Error: couldn't set the socket to listen for connections\n", close(listenFd), 1);
+
+ // std::vector<client> clients;
+  std::map<int, client> clients; // IMPROV: using map instead of vector lets us iterate with the fd directly 
+  std::vector<pollfd> pollfds;
+
+  pollfd listen_pfd = {
+    .fd = listenFd,
+    .events = POLLIN,
+    .revents = 0
+  };
+  
+  pollfds.push_back(listen_pfd);
+
+  while(true){
+    if(poll(&pollfds[0], pollfds.size(), -1) < 0){
+      std::cerr << "Error: poll failed\n";
+      break;
+    }
+    
+    for(int i = pollfds.size() - 1; i >= 0; i--){
+
+      if(pollfds[i].revents == 0)
+        continue;
+
+      if(pollfds[i].fd == listenFd && (pollfds[i].revents & POLLIN)){
+        int new_fd = accept(listenFd, NULL, NULL);
+        if (new_fd >= 0){
+          if(!set_non_blocking(new_fd)){
+            close(new_fd);
+            continue;
+          }
+
+           pollfd new_pclient{
+            .fd = new_fd,
+            .events = POLLIN,
+            .revents = 0
+           };
+
+          pollfds.push_back(new_pclient);
+
+          client new_client = {};
+          new_client.client_fd = new_fd;
+          new_client.p_bytes = 0;
+          new_client.w_bytes = 0;
+          new_client.server_fd = listenFd;
+          new_client.status = WAIT;
+          clients[new_fd] = new_client; 
+        }
+
+
+      }
+
+      
+    }
+  }
+
+ return 0;
+}

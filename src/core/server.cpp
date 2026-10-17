@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include <asm-generic/socket.h>
 #include <fcntl.h>
 #include <map>
 #include <sys/poll.h>
@@ -27,6 +28,10 @@ int main(){
   address.sin_port = htons(SK_PORT);
   address.sin_family = AF_INET;
 
+  int opt = 1;
+  if(setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    return(std::cerr << "Error: setsockopt failed\n", close(listenFd), 1);
+
   if(!set_non_blocking(listenFd))
     return (1);
 
@@ -40,11 +45,10 @@ int main(){
   std::map<int, client> clients; // IMPROV: using map instead of vector lets us iterate with the fd directly 
   std::vector<pollfd> pollfds;
 
-  pollfd listen_pfd = {
-    .fd = listenFd,
-    .events = POLLIN,
-    .revents = 0
-  };
+  pollfd listen_pfd = {};
+    listen_pfd.fd = listenFd;
+    listen_pfd.events = POLLIN;
+    listen_pfd.revents = 0;
   
   pollfds.push_back(listen_pfd);
 
@@ -67,11 +71,10 @@ int main(){
             continue;
           }
 
-           pollfd new_pclient{
-            .fd = new_fd,
-            .events = POLLIN,
-            .revents = 0
-           };
+           pollfd new_pclient = {};
+           new_pclient.fd = new_fd;
+           new_pclient.events = POLLIN;
+           new_pclient.revents = 0;
 
           pollfds.push_back(new_pclient);
 
@@ -80,7 +83,7 @@ int main(){
           new_client.p_bytes = 0;
           new_client.w_bytes = 0;
           new_client.server_fd = listenFd;
-          new_client.status = WAIT;
+          new_client.status = READ;
           clients[new_fd] = new_client; 
         }
 

@@ -30,8 +30,8 @@ typedef struct client_info{
 
   states status;
   size_t w_bytes;
-  size_t p_bytes; // REVIEW: parsed bytes, so that the parser doesn't have to re-parse everytime
-
+  size_t p_bytes; // REVIEW: parsed or already read bytes, so that the parser
+                  //          doesn't have to re-parse everything everytime
   int client_fd;
   int server_fd;  
 } client;

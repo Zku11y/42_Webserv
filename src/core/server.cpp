@@ -17,6 +17,32 @@ int set_non_blocking(int fd){
   return 1;
 }
 
+int add_client(int &listenFd, std::vector<pollfd> &pollfds, std::map<int, client> clients){
+
+  int new_fd = accept(listenFd, NULL, NULL);
+  if (new_fd >= 0){
+    if(!set_non_blocking(new_fd))
+      return (close(new_fd), 0);
+      
+    pollfd new_pclient = {};
+    new_pclient.fd = new_fd;
+    new_pclient.events = POLLIN;
+    new_pclient.revents = 0;
+
+    pollfds.push_back(new_pclient);
+
+    client new_client = {};
+    new_client.client_fd = new_fd;
+    new_client.p_bytes = 0;
+    new_client.w_bytes = 0;
+    new_client.server_fd = listenFd;
+    new_client.status = READ;
+    clients[new_fd] = new_client; 
+  }
+
+  return 1;
+}
+
 int main(){
 
   int listenFd = socket(AF_INET, SOCK_STREAM, 0);
@@ -44,16 +70,18 @@ int main(){
  // std::vector<client> clients;
   std::map<int, client> clients; // IMPROV: using map instead of vector lets us iterate with the fd directly 
   std::vector<pollfd> pollfds;
+  std::vector<pollfd> serverfds;
 
   pollfd listen_pfd = {};
     listen_pfd.fd = listenFd;
     listen_pfd.events = POLLIN;
     listen_pfd.revents = 0;
+  serverfds.push_back(listen_pfd);
   
   pollfds.push_back(listen_pfd);
 
   while(true){
-    if(poll(&pollfds[0], pollfds.size(), -1) < 0){
+    if(poll(&serverfds[0], pollfds.size(), -1) < 0){
       std::cerr << "Error: poll failed\n";
       break;
     }
@@ -63,36 +91,25 @@ int main(){
       if(pollfds[i].revents == 0)
         continue;
 
-      if(pollfds[i].fd == listenFd && (pollfds[i].revents & POLLIN)){
-        int new_fd = accept(listenFd, NULL, NULL);
-        if (new_fd >= 0){
-          if(!set_non_blocking(new_fd)){
-            close(new_fd);
-            continue;
-          }
+      for(int j = 0; j < serverfds.size(); j++){
+        if(pollfds[i].fd != serverfds[j].fd)
+          continue;
 
-           pollfd new_pclient = {};
-           new_pclient.fd = new_fd;
-           new_pclient.events = POLLIN;
-           new_pclient.revents = 0;
-
-          pollfds.push_back(new_pclient);
-
-          client new_client = {};
-          new_client.client_fd = new_fd;
-          new_client.p_bytes = 0;
-          new_client.w_bytes = 0;
-          new_client.server_fd = listenFd;
-          new_client.status = READ;
-          clients[new_fd] = new_client; 
+        if(pollfds[i].revents & (POLLERR | POLLNVAL)){
+          pollfds.erase(pollfds.begin() + i);
+          serverfds.erase(serverfds.begin() + j);
+          continue;
         }
 
-
+        if(pollfds[i].revents & POLLIN){
+          if(!add_client(listenFd, pollfds, clients))
+            continue;
+        }
       }
 
       
     }
+        
   }
-
  return 0;
 }

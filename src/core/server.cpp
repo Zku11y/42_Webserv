@@ -1,43 +1,47 @@
-#include "server.hpp"
-#include <asm-generic/socket.h>
+#include "../../inc/core/server.hpp"
+#include <cerrno>
 #include <fcntl.h>
-#include <map>
-#include <sys/poll.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <vector>
+#include <netinet/in.h>
+#include <unistd.h>
+
+// TODO: any push back and other functions that allocate need to be checked so that they
+//         don't throw and end the whole program
 
 int set_non_blocking(int fd){
-  int flags = fcntl(fd, F_GETFL, 0);
-  if(flags < 0)
-    return(std::cerr << "Error: fcntl(F_GETFL) failed", 0);
-
-  if(fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)      
+  if(fcntl(fd, F_SETFL, O_NONBLOCK) < 0)      
     return(std::cerr << "Error: fcntl(F_SETFL) failed", 0);
-
   return 1;
 }
 
-int add_client(int &listenFd, std::vector<pollfd> &pollfds, std::vector<client> &clients){
+int add_client(int listenFd, std::vector<pollfd> &pollfds, std::vector<client> &clients){
 
   int new_fd = accept(listenFd, NULL, NULL);
-  if (new_fd >= 0){
-    if(!set_non_blocking(new_fd))
-      return (0);
-
-    pollfd new_pclient = {};
-    new_pclient.fd = new_fd;
-    new_pclient.events = POLLIN;
-    new_pclient.revents = 0;
-    pollfds.push_back(new_pclient);
-
-    client new_client = {};
-    new_client.client_fd = new_fd;
-    new_client.p_bytes = 0;
-    new_client.w_bytes = 0;
-    new_client.server_fd = listenFd;
-    new_client.status = READ;
-    clients.push_back(new_client); 
+  if (new_fd < 0){
+    std::cerr << "Error: Couldn't accept new client\n";
+    return 0;
   }
+  
+  if(!set_non_blocking(new_fd)){
+    std::cerr << "Error: Couldn't set client fd to non blocking\n";
+    return (close(new_fd), 0);
+  }
+
+  pollfd new_pclient = {};
+  new_pclient.fd = new_fd;
+  new_pclient.events = POLLIN;
+  new_pclient.revents = 0;
+  pollfds.push_back(new_pclient);
+
+  client new_client = {};
+  new_client.client_fd = new_fd;
+  new_client.p_bytes = 0;
+  new_client.w_bytes = 0;
+  new_client.server_fd = listenFd;
+  new_client.status = READ;
+  clients.push_back(new_client);
 
   return 1;
 }
@@ -57,7 +61,7 @@ int add_listener(std::vector<pollfd> &pollfds, uint32_t sk_ip, uint16_t sk_port)
     return(std::cerr << "Error: setsockopt failed\n", close(listenFd), -1);
 
   if(!set_non_blocking(listenFd))
-    return (-1);
+    return (close(listenFd), -1);
 
   if(bind(listenFd, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0)
     return(std::cerr << "Error: couldn't bind socket to address and port\n", close(listenFd), -1);
@@ -88,17 +92,24 @@ int main(){
   serverfds.push_back(listenFd);
 
   while(true){
-    if(poll(&pollfds[0], pollfds.size(), -1) < 0){
+    if(pollfds.empty()){
+      std::cerr << "All sockets (server and client) were closed\n";
+      break;
+    }
+    int res = poll(&pollfds[0], pollfds.size(), -1); // TODO: may need to change timeout to something like 50 or 100
+    if(res < 0){
+      if(errno == EINTR) // REASON: in the case of interruptions such as CGI signals
+        continue;
       std::cerr << "Error: poll failed\n";
       break;
     }
     
-    for(int i = pollfds.size() - 1; i >= 0; i--){
+    for(int i = static_cast<int>(pollfds.size()) - 1; i >= 0; i--){
 
       if(pollfds[i].revents == 0)
         continue;
 
-      for(int j = 0; j < serverfds.size(); j++){
+      for(int j = static_cast<int>(serverfds.size()) - 1; j >= 0; j--){
         if(pollfds[i].fd != serverfds[j])
           continue;
 
@@ -106,17 +117,14 @@ int main(){
           close(pollfds[i].fd);
           pollfds.erase(pollfds.begin() + i);
           serverfds.erase(serverfds.begin() + j);
-          continue;
+       }
+        else if(pollfds[i].revents & POLLIN){
+          if(!add_client(pollfds[i].fd, pollfds, clients)){
+            std::cerr << "Error: couldn't add new client\n";
+         }
         }
 
-        if(pollfds[i].revents & POLLIN){
-          if(!add_client(listenFd, pollfds, clients)){
-            close(pollfds[i].fd);
-            pollfds.erase(pollfds.begin() + i);
-            serverfds.erase(serverfds.begin() + j);
-            continue; 
-          }
-        }
+        break;
       }
 
 

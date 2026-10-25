@@ -43,31 +43,61 @@ int add_client(int &listenFd, std::vector<pollfd> &pollfds, std::map<int, client
   return 1;
 }
 
-int main(){
-
+int add_listener(uint32_t sk_ip, uint16_t sk_port){
   int listenFd = socket(AF_INET, SOCK_STREAM, 0);
   if (listenFd < 0)
-    return (std::cerr << "Error: couldn't create listening socket\n", 1);
+    return (std::cerr << "Error: couldn't create listening socket\n", -1);
 
   sockaddr_in address = {};
-  address.sin_addr.s_addr = htonl(SK_IP);
-  address.sin_port = htons(SK_PORT);
+  address.sin_addr.s_addr = htonl(sk_ip);
+  address.sin_port = htons(sk_port);
   address.sin_family = AF_INET;
 
   int opt = 1;
   if(setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-    return(std::cerr << "Error: setsockopt failed\n", close(listenFd), 1);
+    return(std::cerr << "Error: setsockopt failed\n", close(listenFd), -1);
 
   if(!set_non_blocking(listenFd))
-    return (1);
+    return (-1);
 
   if(bind(listenFd, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0)
-    return(std::cerr << "Error: couldn't bind socket to address and port\n", close(listenFd), 1);
+    return(std::cerr << "Error: couldn't bind socket to address and port\n", close(listenFd), -1);
 
   if(listen(listenFd, BACKLOG_MAX) < 0)
-    return(std::cerr << "Error: couldn't set the socket to listen for connections\n", close(listenFd), 1);
+    return(std::cerr << "Error: couldn't set the socket to listen for connections\n", close(listenFd), -1);
+
+  return listenFd;
+}
+
+int main(){
+
+  // int listenFd = socket(AF_INET, SOCK_STREAM, 0);
+  // if (listenFd < 0)
+  //   return (std::cerr << "Error: couldn't create listening socket\n", 1);
+
+  // sockaddr_in address = {};
+  // address.sin_addr.s_addr = htonl(SK_IP);
+  // address.sin_port = htons(SK_PORT);
+  // address.sin_family = AF_INET;
+
+  // int opt = 1;
+  // if(setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+  //   return(std::cerr << "Error: setsockopt failed\n", close(listenFd), 1);
+
+  // if(!set_non_blocking(listenFd))
+  //   return (1);
+
+  // if(bind(listenFd, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0)
+  //   return(std::cerr << "Error: couldn't bind socket to address and port\n", close(listenFd), 1);
+
+  // if(listen(listenFd, BACKLOG_MAX) < 0)
+  //   return(std::cerr << "Error: couldn't set the socket to listen for connections\n", close(listenFd), 1);
 
  // std::vector<client> clients;
+  int listenFd = add_listener(SK_IP, SK_PORT);
+  if(listenFd < 0)
+    return 1;    
+
   std::map<int, client> clients; // IMPROV: using map instead of vector lets us iterate with the fd directly 
   std::vector<pollfd> pollfds;
   std::vector<pollfd> serverfds;

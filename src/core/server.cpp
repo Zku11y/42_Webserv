@@ -17,18 +17,17 @@ int set_non_blocking(int fd){
   return 1;
 }
 
-int add_client(int &listenFd, std::vector<pollfd> &pollfds, std::map<int, client> clients){
+int add_client(int &listenFd, std::vector<pollfd> &pollfds, std::vector<client> &clients){
 
   int new_fd = accept(listenFd, NULL, NULL);
   if (new_fd >= 0){
     if(!set_non_blocking(new_fd))
-      return (close(new_fd), 0);
-      
+      return (0);
+
     pollfd new_pclient = {};
     new_pclient.fd = new_fd;
     new_pclient.events = POLLIN;
     new_pclient.revents = 0;
-
     pollfds.push_back(new_pclient);
 
     client new_client = {};
@@ -37,13 +36,13 @@ int add_client(int &listenFd, std::vector<pollfd> &pollfds, std::map<int, client
     new_client.w_bytes = 0;
     new_client.server_fd = listenFd;
     new_client.status = READ;
-    clients[new_fd] = new_client; 
+    clients.push_back(new_client); 
   }
 
   return 1;
 }
 
-int add_listener(uint32_t sk_ip, uint16_t sk_port){
+int add_listener(std::vector<pollfd> &pollfds, uint32_t sk_ip, uint16_t sk_port){
   int listenFd = socket(AF_INET, SOCK_STREAM, 0);
   if (listenFd < 0)
     return (std::cerr << "Error: couldn't create listening socket\n", -1);
@@ -66,52 +65,30 @@ int add_listener(uint32_t sk_ip, uint16_t sk_port){
   if(listen(listenFd, BACKLOG_MAX) < 0)
     return(std::cerr << "Error: couldn't set the socket to listen for connections\n", close(listenFd), -1);
 
+  pollfd listen_pfd = {};
+    listen_pfd.fd = listenFd;
+    listen_pfd.events = POLLIN;
+    listen_pfd.revents = 0;
+
+  pollfds.push_back(listen_pfd);
+
   return listenFd;
 }
 
 int main(){
 
-  // int listenFd = socket(AF_INET, SOCK_STREAM, 0);
-  // if (listenFd < 0)
-  //   return (std::cerr << "Error: couldn't create listening socket\n", 1);
-
-  // sockaddr_in address = {};
-  // address.sin_addr.s_addr = htonl(SK_IP);
-  // address.sin_port = htons(SK_PORT);
-  // address.sin_family = AF_INET;
-
-  // int opt = 1;
-  // if(setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-  //   return(std::cerr << "Error: setsockopt failed\n", close(listenFd), 1);
-
-  // if(!set_non_blocking(listenFd))
-  //   return (1);
-
-  // if(bind(listenFd, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0)
-  //   return(std::cerr << "Error: couldn't bind socket to address and port\n", close(listenFd), 1);
-
-  // if(listen(listenFd, BACKLOG_MAX) < 0)
-  //   return(std::cerr << "Error: couldn't set the socket to listen for connections\n", close(listenFd), 1);
-
- // std::vector<client> clients;
-  int listenFd = add_listener(SK_IP, SK_PORT);
-  if(listenFd < 0)
-    return 1;    
-
-  std::map<int, client> clients; // IMPROV: using map instead of vector lets us iterate with the fd directly 
+ std::vector<client> clients;
   std::vector<pollfd> pollfds;
-  std::vector<pollfd> serverfds;
+  std::vector<int> serverfds;
 
-  pollfd listen_pfd = {};
-    listen_pfd.fd = listenFd;
-    listen_pfd.events = POLLIN;
-    listen_pfd.revents = 0;
-  serverfds.push_back(listen_pfd);
-  
-  pollfds.push_back(listen_pfd);
+  int listenFd = add_listener(pollfds, SK_IP, SK_PORT);
+  if(listenFd < 0)
+    return 1;
+
+  serverfds.push_back(listenFd);
 
   while(true){
-    if(poll(&serverfds[0], pollfds.size(), -1) < 0){
+    if(poll(&pollfds[0], pollfds.size(), -1) < 0){
       std::cerr << "Error: poll failed\n";
       break;
     }
@@ -122,20 +99,26 @@ int main(){
         continue;
 
       for(int j = 0; j < serverfds.size(); j++){
-        if(pollfds[i].fd != serverfds[j].fd)
+        if(pollfds[i].fd != serverfds[j])
           continue;
 
         if(pollfds[i].revents & (POLLERR | POLLNVAL)){
+          close(pollfds[i].fd);
           pollfds.erase(pollfds.begin() + i);
           serverfds.erase(serverfds.begin() + j);
           continue;
         }
 
         if(pollfds[i].revents & POLLIN){
-          if(!add_client(listenFd, pollfds, clients))
-            continue;
+          if(!add_client(listenFd, pollfds, clients)){
+            close(pollfds[i].fd);
+            pollfds.erase(pollfds.begin() + i);
+            serverfds.erase(serverfds.begin() + j);
+            continue; 
+          }
         }
       }
+
 
       
     }

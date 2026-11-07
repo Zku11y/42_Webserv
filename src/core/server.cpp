@@ -2,10 +2,13 @@
 #include <cerrno>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/poll.h>
 #include <sys/socket.h>
 #include <vector>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <map>
+#include <utility>
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
@@ -16,17 +19,18 @@ int set_non_blocking(int fd){
   return 1;
 }
 
-int add_client(int listenFd, std::vector<pollfd> &pollfds, std::vector<client> &clients){
+void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client> &clients){
 
   int new_fd = accept(listenFd, NULL, NULL);
   if (new_fd < 0){
     std::cerr << "Error: Couldn't accept new client\n";
-    return 0;
+    return ;
   }
   
   if(!set_non_blocking(new_fd)){
     std::cerr << "Error: Couldn't set client fd to non blocking\n";
-    return (close(new_fd), 0);
+    close(new_fd);
+    return ;
   }
 
   pollfd new_pclient = {};
@@ -37,13 +41,13 @@ int add_client(int listenFd, std::vector<pollfd> &pollfds, std::vector<client> &
 
   client new_client = {};
   new_client.client_fd = new_fd;
-  new_client.p_bytes = 0;
+  new_client.r_bytes = 0;
   new_client.w_bytes = 0;
   new_client.server_fd = listenFd;
   new_client.status = READ;
-  clients.push_back(new_client);
-
-  return 1;
+    
+  if(!clients.insert(std::make_pair(new_fd, new_client)).second)
+    std::cerr << "Error: Client fd already exists in map\n";
 }
 
 int add_listener(std::vector<pollfd> &pollfds, uint32_t sk_ip, uint16_t sk_port){
@@ -81,7 +85,7 @@ int add_listener(std::vector<pollfd> &pollfds, uint32_t sk_ip, uint16_t sk_port)
 
 int main(){
 
- std::vector<client> clients;
+  std::map<int, client> clients;
   std::vector<pollfd> pollfds;
   std::vector<int> serverfds;
 
@@ -104,29 +108,30 @@ int main(){
       break;
     }
     
-    for(int i = static_cast<int>(pollfds.size()) - 1; i >= 0; i--){
+    for(size_t i = pollfds.size() - 1; i >= 0; i--){
 
       if(pollfds[i].revents == 0)
         continue;
 
-      for(int j = static_cast<int>(serverfds.size()) - 1; j >= 0; j--){
+      typefd type = CLIENT;
+
+      for(size_t j = serverfds.size() - 1; j >= 0; j--){
         if(pollfds[i].fd != serverfds[j])
           continue;
 
-        if(pollfds[i].revents & (POLLERR | POLLNVAL)){
+        type = SERVER;
+        if(pollfds[i].revents & (POLLERR | POLLNVAL | POLLHUP)){
           close(pollfds[i].fd);
           pollfds.erase(pollfds.begin() + i);
           serverfds.erase(serverfds.begin() + j);
        }
-        else if(pollfds[i].revents & POLLIN){
-          if(!add_client(pollfds[i].fd, pollfds, clients)){
-            std::cerr << "Error: couldn't add new client\n";
-         }
-        }
+        else if(pollfds[i].revents & POLLIN)
+          add_client(pollfds[i].fd, pollfds, clients);
 
         break;
       }
 
+      if(type == SERVER || clients.empty()) continue;
 
       
     }

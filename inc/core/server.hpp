@@ -23,6 +23,11 @@ enum states{
   WAIT
 };
 
+enum typefd{
+  SERVER,
+  CLIENT
+};
+
 typedef struct client_info{
 
   std::string w_buff;
@@ -30,7 +35,7 @@ typedef struct client_info{
 
   states status;
   size_t w_bytes;
-  size_t p_bytes; // REVIEW: parsed or already read bytes, so that the parser
+  size_t r_bytes; // REVIEW: parsed or already read bytes, so that the parser
                   //          doesn't have to re-parse everything everytime
   int client_fd;
   int server_fd;  

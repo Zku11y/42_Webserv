@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/poll.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <vector>
 #include <netinet/in.h>
@@ -19,6 +20,14 @@ int set_non_blocking(int fd){
   return 1;
 }
 
+double get_time(){
+  timeval tv;
+
+  gettimeofday(&tv, NULL);
+
+  return ((double)tv.tv_sec * 1000.0) + ((double)tv.tv_usec / 1000.0);
+}
+
 void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client> &clients){
 
   int new_fd = accept(listenFd, NULL, NULL);
@@ -33,21 +42,26 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client
     return ;
   }
 
+  client new_client = {};
+  new_client.client_fd = new_fd;
+  new_client.r_bytes = 0;
+  new_client.w_bytes = 0;
+  new_client.tr_bytes = 0;
+  new_client.tw_bytes = 0;
+  new_client.server_fd = listenFd;
+  new_client.t_out = get_time();
+  new_client.status = READ;
+  if(!clients.insert(std::make_pair(new_fd, new_client)).second){
+    std::cerr << "Error: Client fd already exists in map\n";
+    close(new_fd);
+    return ;
+  }
+  
   pollfd new_pclient = {};
   new_pclient.fd = new_fd;
   new_pclient.events = POLLIN;
   new_pclient.revents = 0;
   pollfds.push_back(new_pclient);
-
-  client new_client = {};
-  new_client.client_fd = new_fd;
-  new_client.r_bytes = 0;
-  new_client.w_bytes = 0;
-  new_client.server_fd = listenFd;
-  new_client.status = READ;
-    
-  if(!clients.insert(std::make_pair(new_fd, new_client)).second)
-    std::cerr << "Error: Client fd already exists in map\n";
 }
 
 int add_listener(std::vector<pollfd> &pollfds, uint32_t sk_ip, uint16_t sk_port){
@@ -100,7 +114,7 @@ int main(){
       std::cerr << "All sockets (server and client) were closed\n";
       break;
     }
-    int res = poll(&pollfds[0], pollfds.size(), -1); // TODO: may need to change timeout to something like 50 or 100
+    int res = poll(&pollfds[0], pollfds.size(), 100); // TODO: may need to change timeout to something like 50 or 100
     if(res < 0){
       if(errno == EINTR) // REASON: in the case of interruptions such as CGI signals
         continue;
@@ -108,14 +122,16 @@ int main(){
       break;
     }
     
-    for(size_t i = pollfds.size() - 1; i >= 0; i--){
-
-      if(pollfds[i].revents == 0)
-        continue;
+    for(size_t i = pollfds.size(); i > 0;){
+      i--;
+      
+      //if(pollfds[i].revents == 0)
+      //  continue;
 
       typefd type = CLIENT;
 
-      for(size_t j = serverfds.size() - 1; j >= 0; j--){
+      for(size_t j = serverfds.size(); j > 0;){
+        j--;
         if(pollfds[i].fd != serverfds[j])
           continue;
 
@@ -131,11 +147,65 @@ int main(){
         break;
       }
 
-      if(type == SERVER || clients.empty()) continue;
+      if(type == SERVER || clients.empty()) continue; // if not server, its client, but if client isn't added yet then unused fd in pollfds
 
-      
-    }
+      std::map<int, client>::iterator found = clients.find(pollfds[i].fd);
+      if(found == clients.end()){ // IMPORTANT: add check for CGI pipe, this skips the moment its not a client fd
+        close(pollfds[i].fd);
+        pollfds.erase(pollfds.begin() + i);
+        continue;
+      }
+
+      client &crnt_client = found->second;
+      if(pollfds[i].revents & (POLLERR | POLLNVAL)
+        || ((pollfds[i].revents & POLLHUP) && !(pollfds[i].revents & (POLLIN | POLLOUT)))
+        || (get_time() - crnt_client.t_out) > T_OUT){
+
+        close(pollfds[i].fd);
+        pollfds.erase(pollfds.begin() + i);
+        clients.erase(found);
+        continue;
+      }
+
+      if(pollfds[i].revents & POLLIN){
+        char buffer[4096];
+        ssize_t res = recv(pollfds[i].fd, buffer, sizeof(buffer), 0);
+
+        // client sent data, write it in r_buff, parser reads it and continues creating request
+        if (res > 0){ 
+          crnt_client.r_bytes = res;
+          crnt_client.tr_bytes += res;
+          crnt_client.t_out = get_time();
+          crnt_client.r_buff.append(buffer, res);
+        }
+
+        // client closes its end of write, switch to POLLOUT and send response
+          // (got a full request and generated a proper response /
+          //  got an unfinished request and generated an error response)
+          // client socket auto closes when timeout is reached
+        else if(res == 0){      
+          crnt_client.r_bytes = 0; // parser must stop expecting more reads and finish the response
+          crnt_client.status = WRITE_THEN_CLOSE; // write code should check for CLOSED before switching to READ and POLLIN, in that case close and cleanup
+          pollfds[i].events = POLLOUT;
+          crnt_client.t_out = get_time();
+        }
+
+        // an error was flagged, but since we can't check errno we can't diff between
+          // a server breaking error and a simple pause flag sent by the client, so we close the socket
+        else if (res < 0){
+          close(pollfds[i].fd);
+          pollfds.erase(pollfds.begin() + i);
+          clients.erase(found);
+          continue;
+        }
+
+        // [ ... ] call the parse and CGI functions, must communicate when client is removed and get info
+          // on request finished to switch event to POLLOUT + status to WRITE and vise versa with the response 
+
+      }
+     
+    } // for()
         
-  }
+  } // while()
  return 0;
 }

@@ -4,7 +4,7 @@ CXX     = c++
 # CXXFLAGS = -Wall -Wextra  -std=c++98
 CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 
-SRCS    = main.cpp src/http/config.cpp src/http/configParser.cpp
+SRCS    = main.cpp src/http/http.cpp src/http/http_helper.cpp
 OBJS    = $(SRCS:.cpp=.o)
 
 HEADERS = inc/http/config.hpp inc/http/configParser.hpp

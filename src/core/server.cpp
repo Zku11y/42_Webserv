@@ -168,7 +168,7 @@ int main(){
       }
 
       if(pollfds[i].revents & POLLIN){
-        char buffer[4096];
+        char buffer[R_BUFF_SIZE];
         ssize_t res = recv(pollfds[i].fd, buffer, sizeof(buffer), 0);
 
         // client sent data, write it in r_buff, parser reads it and continues creating request
@@ -199,9 +199,52 @@ int main(){
           continue;
         }
 
-        // [ ... ] call the parse and CGI functions, must communicate when client is removed and get info
-          // on request finished to switch event to POLLOUT + status to WRITE and vise versa with the response 
+        // [ ... ] call the parse and CGI functions, must communicate when client is removed
+          // get info on request finished to switch event to POLLOUT + status to WRITE and vise versa with the response 
 
+      }
+
+      if(pollfds[i].revents & POLLOUT){
+        ssize_t bytes_left = crnt_client.w_buff.size() - crnt_client.tw_bytes;
+        ssize_t res = send(pollfds[i].fd, crnt_client.w_buff.c_str() + crnt_client.tw_bytes,
+                                bytes_left >= W_BUFF_SIZE ? W_BUFF_SIZE : bytes_left, MSG_NOSIGNAL);
+
+        if(res > 0){
+      
+          if(crnt_client.tw_bytes + res == crnt_client.w_buff.size()){
+            switch(crnt_client.status){
+              case WRITE:
+                crnt_client.status = READ;
+                pollfds[i].events = POLLIN;
+                crnt_client.tw_bytes = 0;
+                crnt_client.w_bytes = 0;
+                crnt_client.w_buff.clear();
+                break;
+              case WRITE_THEN_CLOSE:
+                close(pollfds[i].fd);
+                clients.erase(found);
+                pollfds.erase(pollfds.begin() + i);
+                continue;
+              default:
+                break;
+            }
+          }
+          else{
+            crnt_client.w_bytes = res;
+            crnt_client.tw_bytes += res;
+          }
+
+           crnt_client.t_out = get_time();
+        }
+
+        // if res == 0 : ignore and move on. if we keep getting 0 timeout will eventually stop it
+
+        if(res < 0){
+          close(pollfds[i].fd);
+          clients.erase(found);
+          pollfds.erase(pollfds.begin() + i);
+          continue;           
+        }
       }
      
     } // for()

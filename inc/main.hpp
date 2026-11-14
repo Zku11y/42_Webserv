@@ -13,7 +13,10 @@
 #include <cerrno>
 #include <cctype>
 #include <cstdio>
+
 #include "./http/config.hpp"
+#include "./http/client.hpp"
+#include "./cgi_io/Execution.hpp"
 
 #define PORT 8080
 #define BACKLOG 10
@@ -24,32 +27,5 @@
 #define ft_log(x) std::cout << x << std::endl
 #define ft_log_r(x) std::cerr << x << std::endl
 
-struct HttpRequest {
-    std::string method;         
-    std::string uri;            
-    std::string query_string;   
-
-    std::string physical_path;  
-    bool is_directory;          
-    bool autoindex;             
-    std::string cgi_executable;  
-    std::string upload_store;    
-
-    int body_fd;                
-};
-
-struct Client {
-    int         fd;
-    std::string request_buffer;
-    std::string response_buffer; // Where your fully formatted HTTP response goes
-    HttpRequest parsed_req;      // The mocked Dev 2 data
-
-    std::string raw_body;   // Holds pure HTML/File data or CGI output
-    int         status_code;
-};
-
 
 int main(int ac, char **av);
-int ft_core(Config&  config);
-void ft_set_error(Client& client, int status);
-void ft_handle_resource(Client& client,Config&  config);

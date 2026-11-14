@@ -6,6 +6,8 @@
 
 class LocationConfig
 {
+	friend class Execution;
+
 	private:
 		std::string					_path;
 		std::vector<std::string>	_methods;
@@ -61,6 +63,8 @@ class LocationConfig
 
 class	ServerConfig
 {
+	friend class Execution;
+
 	private:
 		int							_port;
 		std::string					_host;
@@ -95,6 +99,8 @@ class	ServerConfig
 
 class Config
 {
+	friend class Execution;
+
 	private:
 		std::vector<ServerConfig>	_servers;
 	public:

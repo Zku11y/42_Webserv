@@ -1,10 +1,12 @@
 #include "../../inc/core/server.hpp"
 #include <cerrno>
+#include <exception>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/poll.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <vector>
 #include <netinet/in.h>
 #include <unistd.h>
@@ -28,7 +30,7 @@ double get_time(){
   return ((double)tv.tv_sec * 1000.0) + ((double)tv.tv_usec / 1000.0);
 }
 
-void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client> &clients){
+void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client> &clients, server_info &server){
 
   int new_fd = accept(listenFd, NULL, NULL);
   if (new_fd < 0){
@@ -42,7 +44,7 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client
     return ;
   }
 
-  client new_client = {};
+  client new_client;
   new_client.client_fd = new_fd;
   new_client.r_bytes = 0;
   new_client.w_bytes = 0;
@@ -51,6 +53,7 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client
   new_client.server_fd = listenFd;
   new_client.t_out = get_time();
   new_client.status = READ;
+  new_client.parser.setMaxBodySize(server.max_size);
   if(!clients.insert(std::make_pair(new_fd, new_client)).second){
     std::cerr << "Error: Client fd already exists in map\n";
     close(new_fd);
@@ -64,14 +67,63 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client
   pollfds.push_back(new_pclient);
 }
 
-int add_listener(std::vector<pollfd> &pollfds, uint32_t sk_ip, uint16_t sk_port){
+uint32_t convert_ip(std::string &ip){
+    unsigned int parts[4] = {0};
+    int part = 0;
+    int digits = 0;
+
+    for (size_t i = 0; i < ip.size(); i++)
+    {
+        if (ip[i] == '.')
+        {
+            if (digits == 0 || part >= 3)
+                return -1;
+            part++;
+            digits = 0;
+        }
+        else if (ip[i] >= '0' && ip[i] <= '9')
+        {
+            if (++digits > 3)
+                return -1;
+            parts[part] = parts[part] * 10 + (ip[i] - '0');
+            if (parts[part] > 255)
+                return -1;
+        }
+        else
+            return -1;
+    }
+
+    if (part != 3 || digits == 0)
+        return -1;
+
+    uint32_t result = (parts[0] << 24) |
+                      (parts[1] << 16) |
+                      (parts[2] << 8)  |
+                       parts[3];
+
+    return result;
+}
+
+
+int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverfds, ServerConfig &server){
   int listenFd = socket(AF_INET, SOCK_STREAM, 0);
   if (listenFd < 0)
     return (std::cerr << "Error: couldn't create listening socket\n", -1);
 
   sockaddr_in address = {};
-  address.sin_addr.s_addr = htonl(sk_ip);
-  address.sin_port = htons(sk_port);
+
+  std::string ip = server.getHost();
+  int port = server.getPort();
+
+  int host = convert_ip(ip);
+
+ if (host < 0) {
+      std::cerr << "Invalid IP address format.\n";
+      return 1;
+ }
+
+  address.sin_addr.s_addr = htonl(host);
+  address.sin_port = htons(port);
   address.sin_family = AF_INET;
 
   int opt = 1;
@@ -87,28 +139,35 @@ int add_listener(std::vector<pollfd> &pollfds, uint32_t sk_ip, uint16_t sk_port)
   if(listen(listenFd, BACKLOG_MAX) < 0)
     return(std::cerr << "Error: couldn't set the socket to listen for connections\n", close(listenFd), -1);
 
+  server_info listen_info = {};
+  listen_info.fd = listenFd;
+  listen_info.ip = ip;
+  listen_info.port = port;
+  listen_info.max_size = server.getClientMaxBodySize();
+
   pollfd listen_pfd = {};
     listen_pfd.fd = listenFd;
     listen_pfd.events = POLLIN;
     listen_pfd.revents = 0;
 
   pollfds.push_back(listen_pfd);
+  serverfds.push_back(listen_info);
 
   return listenFd;
 }
 
-int main(){
+int connection_handler(Config &cfg){
 
   std::map<int, client> clients;
   std::vector<pollfd> pollfds;
-  std::vector<int> serverfds;
+  std::vector<server_info> serverfds;
 
-  int listenFd = add_listener(pollfds, SK_IP, SK_PORT);
-  if(listenFd < 0)
-    return 1;
+  std::vector<ServerConfig> servers = cfg.getServers();
 
-  serverfds.push_back(listenFd);
-
+  for(size_t i = 0; i < servers.size(); i++){
+    add_listener(pollfds, serverfds, servers[i]);
+  }
+  
   while(true){
     if(pollfds.empty()){
       std::cerr << "All sockets (server and client) were closed\n";
@@ -132,7 +191,7 @@ int main(){
 
       for(size_t j = serverfds.size(); j > 0;){
         j--;
-        if(pollfds[i].fd != serverfds[j])
+        if(pollfds[i].fd != serverfds[j].fd)
           continue;
 
         type = SERVER;
@@ -142,7 +201,7 @@ int main(){
           serverfds.erase(serverfds.begin() + j);
        }
         else if(pollfds[i].revents & POLLIN)
-          add_client(pollfds[i].fd, pollfds, clients);
+          add_client(pollfds[i].fd, pollfds, clients, serverfds[i]);
 
         break;
       }
@@ -155,7 +214,7 @@ int main(){
         pollfds.erase(pollfds.begin() + i);
         continue;
       }
-
+          
       client &crnt_client = found->second;
       if(pollfds[i].revents & (POLLERR | POLLNVAL)
         || ((pollfds[i].revents & POLLHUP) && !(pollfds[i].revents & (POLLIN | POLLOUT)))
@@ -201,6 +260,8 @@ int main(){
 
         // [ ... ] call the parse and CGI functions, must communicate when client is removed
           // get info on request finished to switch event to POLLOUT + status to WRITE and vise versa with the response 
+
+    
 
       }
 
@@ -250,5 +311,23 @@ int main(){
     } // for()
         
   } // while()
- return 0;
+   return 0;  
+}
+
+int main(int ac, char **av){
+
+  if(ac != 2){
+  // TODO: add explicit message about program arguments
+    return 1;
+  }
+
+  try{
+    Config cfg(av[1]);
+    connection_handler(cfg);
+
+  }catch(std::exception &e){
+    std::cerr << e.what();
+    return 1;
+  }
+
 }

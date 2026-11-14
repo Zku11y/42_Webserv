@@ -1,6 +1,10 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
+#include "../http/http.hpp"
+#include "../http/config.hpp"
+#include "../http/configParser.hpp"
+
 #include <bits/types/struct_timeval.h>
 #include <iostream>
 #include <cstring>
@@ -34,6 +38,13 @@ enum typefd{
   CLIENT
 };
 
+typedef struct server_info{
+  int fd;
+  int port;
+  std::string ip;
+  size_t max_size;
+} sk_server;
+
 typedef struct client_info{
 
   std::string w_buff;
@@ -46,8 +57,17 @@ typedef struct client_info{
   size_t r_bytes;
   int client_fd;
   int server_fd;
+  size_t max_size;
   
   double t_out;
+
+  // anwar files
+
+  HttpParser parser;
+
+  client_info() : parser(){}
+  
+  // 
   
 } client;
 

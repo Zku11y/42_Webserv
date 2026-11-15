@@ -58,7 +58,6 @@ class ConfigParser
 	public:
 		ConfigParser(const std::string& filename);
 		~ConfigParser();
-	
 
 		void	parse(Config& config);
 };

@@ -236,6 +236,7 @@ int connection_handler(Config &cfg){
           crnt_client.tr_bytes += res;
           crnt_client.t_out = get_time();
           crnt_client.r_buff.append(buffer, res);
+          crnt_client.parser.parse(crnt_client.r_buff);
         }
 
         // client closes its end of write, switch to POLLOUT and send response
@@ -256,6 +257,14 @@ int connection_handler(Config &cfg){
           pollfds.erase(pollfds.begin() + i);
           clients.erase(found);
           continue;
+        }
+
+        if(crnt_client.parser.is_complete()){
+          
+          crnt_client.r_bytes = 0;
+          crnt_client.status = WRITE; 
+          pollfds[i].events = POLLOUT;
+          crnt_client.t_out = get_time();
         }
 
         // [ ... ] call the parse and CGI functions, must communicate when client is removed

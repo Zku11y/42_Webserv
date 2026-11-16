@@ -264,7 +264,7 @@ int connection_handler(Config &cfg){
           crnt_client.r_bytes = 0;
           crnt_client.status = WRITE; 
           pollfds[i].events = POLLOUT;
-          crnt_client.t_out = get_time();
+          crnt_client.t_out = get_time(); 
         }
 
         // [ ... ] call the parse and CGI functions, must communicate when client is removed

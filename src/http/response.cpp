@@ -136,6 +136,7 @@ std::string HttpResponseBuilder::build(HttpResponse& response)
 	erase_header(response, "transfer-encoding");
 	if (response.status_code == 204){
 		response.body.clear();
+		close(response.body_fd);
 		response.body_fd = -1;
 		response.body_size = 0;
 		erase_header(response, "content-length");
@@ -147,6 +148,10 @@ std::string HttpResponseBuilder::build(HttpResponse& response)
 		ss << response.body_size;
 		response.headers["Content-Length"] = ss.str();
 	}
+if (response.body_fd == -1)
+		result += response.body;
+	else if (response.body_size <= MAX_INLINE_BODY)
+		result += read_body_fd(response.body_fd);
 
 	for (it = response.headers.begin(); it != response.headers.end(); it++){
 		if (!valid_header_name(it->first) || !valid_header_value(it->second))

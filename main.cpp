@@ -426,7 +426,7 @@ int ft_core(Config& config)
                             client.parsed_req = client.parser.get_request();
 
                             // Connection information from socket
-                            client.parsed_req.localHost = "0.0.0.0";
+                            client.parsed_req.localHost = "127.0.0.1";
                             client.parsed_req.localPort = PORT;
 
                             bool debug_request =
@@ -436,8 +436,8 @@ int ft_core(Config& config)
                                 ft_log_request(client.parsed_req);
 
                             // 5. Pass request to your Execution class
-                            Execution cgi(client, config);
-                            cgi.ft_handle_resource(client);
+                            Execution cgi(client);
+                            cgi.ft_handle_resource(client, config);
                             
                             if (debug_request)
                                 ft_log_response(client.rsp);

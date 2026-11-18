@@ -6,6 +6,8 @@
 
 class LocationConfig
 {
+	friend class Execution;
+
 	private:
 		std::string					_path;
 		std::vector<std::string>	_methods;
@@ -39,7 +41,7 @@ class LocationConfig
 		bool										getAutoindex() const;
 		bool										getUploadEnable() const;
 		const std::string&							getUploadStore() const;
-		int										getReturnCode() const;
+		int											getReturnCode() const;
 		const std::string&							getReturnTarget() const;
 		const std::map<std::string, std::string>&	getCGI() const;
 	
@@ -61,6 +63,8 @@ class LocationConfig
 
 class	ServerConfig
 {
+	friend class Execution;
+
 	private:
 		int							_port;
 		std::string					_host;
@@ -84,7 +88,7 @@ class	ServerConfig
 		const std::map<int, std::string>&	getErrorPages() const;
 		const std::vector<LocationConfig>&	getLocations() const;
 
-
+		
 		void	setPort(int port);
 		void	setHost(const std::string& host);
 		void	setServerName(const std::string& name);
@@ -95,6 +99,8 @@ class	ServerConfig
 
 class Config
 {
+	friend class Execution;
+
 	private:
 		std::vector<ServerConfig>	_servers;
 	public:

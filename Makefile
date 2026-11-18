@@ -1,29 +1,40 @@
-NAME    = webserv
+CC = c++
 
-CXX     = c++
-# CXXFLAGS = -Wall -Wextra  -std=c++98
-CXXFLAGS = -Wall -Wextra -Werror -std=c++98
+CFLAGS = -Wall -Werror -Wextra -std=c++98
+# CFLAGS =  -std=c++98
 
-SRCS    = src/http/http.cpp src/http/http_helper.cpp src/http/configParser.cpp src/http/config.cpp src/core/server.cpp
+SRC =   src/core/server.cpp\
+		src/http/config.cpp\
+		src/http/configParser.cpp\
+		src/http/http.cpp\
+		src/http/http_helper.cpp\
+		src/cgi_io/Execution.cpp
 
-OBJS    = $(SRCS:.cpp=.o)
+OBJ = $(SRC:.cpp=.o)
 
-HEADERS = inc/http/config.hpp inc/http/configParser.hpp inc/core/server.hpp inc/http/http.hpp inc/http/http_helper.hpp
+HEAD =  inc/core/server.hpp\
+		inc/http/config.hpp\
+		inc/http/configParser.hpp\
+		inc/http/http.hpp\
+		inc/cgi_io/Execution.hpp
+
+NAME = sr
 
 all: $(NAME)
 
-$(NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $(NAME) $(OBJS)
-
-%.o: %.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(NAME): $(OBJ)
+	$(CC) $(CFLAGS) $(OBJ) -o $(NAME)
+	
+%.o: %.cpp $(HEAD)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS)
+	rm -rf $(OBJ)
 
 fclean: clean
-	rm -f $(NAME)
+	rm -rf $(NAME)
 
 re: fclean all
 
 .PHONY: all clean fclean re
+

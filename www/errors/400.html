@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>400 Bad Request</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1.5rem;
+        }
+
+        .card {
+            background-color: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 2.5rem 2rem;
+            max-width: 460px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .error-code {
+            font-size: 5.5rem;
+            font-weight: 800;
+            color: #f85149;
+            line-height: 1;
+            margin-bottom: 0.75rem;
+            letter-spacing: -2px;
+        }
+
+        .error-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #f0f6fc;
+            margin-bottom: 0.75rem;
+        }
+
+        .error-description {
+            font-size: 0.925rem;
+            color: #8b949e;
+            line-height: 1.5;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            display: inline-block;
+            background-color: #238636;
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.875rem;
+            padding: 0.65rem 1.25rem;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
+        }
+
+        .btn:hover {
+            background-color: #2ea043;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="error-code">400</div>
+        <h1 class="error-title">Bad Request</h1>
+        <p class="error-description">
+            The server could not understand your request due to invalid syntax or a malformed request line.
+        </p>
+        <a href="/" class="btn">Back to Home</a>
+    </div>
+</body>
+</html>

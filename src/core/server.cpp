@@ -30,7 +30,7 @@ double get_time(){
   return ((double)tv.tv_sec * 1000.0) + ((double)tv.tv_usec / 1000.0);
 }
 
-void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client> &clients, server_info &server){
+void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client> &clients, server_info &server){
 
   int new_fd = accept(listenFd, NULL, NULL);
   if (new_fd < 0){
@@ -44,8 +44,8 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, client
     return ;
   }
 
-  client new_client;
-  new_client.client_fd = new_fd;
+  Client new_client;
+  new_client.fd = new_fd;
   new_client.r_bytes = 0;
   new_client.w_bytes = 0;
   new_client.tr_bytes = 0;
@@ -158,7 +158,7 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
 
 int connection_handler(Config &cfg){
 
-  std::map<int, client> clients;
+  std::map<int, Client> clients;
   std::vector<pollfd> pollfds;
   std::vector<server_info> serverfds;
 
@@ -201,21 +201,21 @@ int connection_handler(Config &cfg){
           serverfds.erase(serverfds.begin() + j);
        }
         else if(pollfds[i].revents & POLLIN)
-          add_client(pollfds[i].fd, pollfds, clients, serverfds[i]);
+          add_client(pollfds[i].fd, pollfds, clients, serverfds[j]);
 
         break;
       }
 
       if(type == SERVER || clients.empty()) continue; // if not server, its client, but if client isn't added yet then unused fd in pollfds
 
-      std::map<int, client>::iterator found = clients.find(pollfds[i].fd);
+      std::map<int, Client>::iterator found = clients.find(pollfds[i].fd);
       if(found == clients.end()){ // IMPORTANT: add check for CGI pipe, this skips the moment its not a client fd
         close(pollfds[i].fd);
         pollfds.erase(pollfds.begin() + i);
         continue;
       }
           
-      client &crnt_client = found->second;
+      Client &crnt_client = found->second;
       if(pollfds[i].revents & (POLLERR | POLLNVAL)
         || ((pollfds[i].revents & POLLHUP) && !(pollfds[i].revents & (POLLIN | POLLOUT)))
         || (get_time() - crnt_client.t_out) > T_OUT){
@@ -235,8 +235,8 @@ int connection_handler(Config &cfg){
           crnt_client.r_bytes = res;
           crnt_client.tr_bytes += res;
           crnt_client.t_out = get_time();
-          crnt_client.r_buff.append(buffer, res);
-          crnt_client.parser.parse(crnt_client.r_buff);
+          crnt_client.request_buffer.append(buffer, res);
+          crnt_client.parser.parse(crnt_client.request_buffer);
         }
 
         // client closes its end of write, switch to POLLOUT and send response
@@ -248,6 +248,10 @@ int connection_handler(Config &cfg){
           crnt_client.status = WRITE_THEN_CLOSE; // write code should check for CLOSED before switching to READ and POLLIN, in that case close and cleanup
           pollfds[i].events = POLLOUT;
           crnt_client.t_out = get_time();
+
+          // TODO: generate a response
+          
+          continue;
         }
 
         // an error was flagged, but since we can't check errno we can't diff between
@@ -275,20 +279,20 @@ int connection_handler(Config &cfg){
       }
 
       if(pollfds[i].revents & POLLOUT){
-        ssize_t bytes_left = crnt_client.w_buff.size() - crnt_client.tw_bytes;
-        ssize_t res = send(pollfds[i].fd, crnt_client.w_buff.c_str() + crnt_client.tw_bytes,
+        ssize_t bytes_left = crnt_client.response_buffer.size() - crnt_client.tw_bytes;
+        ssize_t res = send(pollfds[i].fd, crnt_client.response_buffer.c_str() + crnt_client.tw_bytes,
                                 bytes_left >= W_BUFF_SIZE ? W_BUFF_SIZE : bytes_left, MSG_NOSIGNAL);
 
         if(res > 0){
       
-          if(crnt_client.tw_bytes + res == crnt_client.w_buff.size()){
+          if(crnt_client.tw_bytes + res == crnt_client.response_buffer.size()){
             switch(crnt_client.status){
               case WRITE:
                 crnt_client.status = READ;
                 pollfds[i].events = POLLIN;
                 crnt_client.tw_bytes = 0;
                 crnt_client.w_bytes = 0;
-                crnt_client.w_buff.clear();
+                crnt_client.response_buffer.clear();
                 break;
               case WRITE_THEN_CLOSE:
                 close(pollfds[i].fd);

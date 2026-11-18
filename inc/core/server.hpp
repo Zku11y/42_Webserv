@@ -4,6 +4,7 @@
 #include "../http/http.hpp"
 #include "../http/config.hpp"
 #include "../http/configParser.hpp"
+#include "../http/HttpResponse.hpp"
 
 #include <bits/types/struct_timeval.h>
 #include <iostream>
@@ -47,15 +48,15 @@ typedef struct server_info{
 
 typedef struct client_info{
 
-  std::string w_buff;
-  std::string r_buff;
+  std::string request_buffer;
+  std::string response_buffer;
 
+  int fd;
   states status;
   size_t tw_bytes;
   size_t tr_bytes; // REVIEW: parsed or already read bytes, so that the parser
   size_t w_bytes;   //         doesn't have to re-parse everything everytime
   size_t r_bytes;
-  int client_fd;
   int server_fd;
   size_t max_size;
   
@@ -64,11 +65,13 @@ typedef struct client_info{
   // anwar files
 
   HttpParser parser;
+  HttpRequest parsed_req;
+  HttpResponse rsp;
 
   client_info() : parser(){}
   
   // 
   
-} client;
+} Client;
 
 #endif

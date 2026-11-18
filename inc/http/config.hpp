@@ -112,4 +112,3 @@ class Config
 		void		addServer(const ServerConfig& server);
 		void		validate();
 };
-

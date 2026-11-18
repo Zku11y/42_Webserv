@@ -1,4 +1,5 @@
-#include "../../inc/main.hpp"
+#include "../../inc/core/server.hpp"
+#include "../../inc/cgi_io/Execution.hpp"
 
 /* **********************************************/
 /*                                              */

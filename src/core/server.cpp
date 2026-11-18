@@ -12,9 +12,45 @@
 #include <unistd.h>
 #include <map>
 #include <utility>
+#include "../../inc/cgi_io/Execution.hpp"
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
+
+static void ft_log_response(const HttpResponse& rsp)
+{
+    ft_log("\n========================================");
+    ft_log("          HTTP RESPONSE");
+    ft_log("========================================");
+
+    // Status
+    ft_log("\n[STATUS]");
+    ft_log("Status Code   : [" << rsp.status_code << "]");
+
+    // Headers
+    ft_log("\n[HEADERS] (" << rsp.headers.size() << ")");
+
+    for (std::map<std::string, std::string>::const_iterator it =
+         rsp.headers.begin(); it != rsp.headers.end(); ++it)
+    {
+        ft_log("  " << it->first << " : [" << it->second << "]");
+    }
+
+    // Body
+    ft_log("\n[BODY]");
+    ft_log("Body FD       : [" << rsp.body_fd << "]");
+    ft_log("Body Size     : [" << rsp.body_size << "] bytes");
+    ft_log("String Size   : [" << rsp.body.size() << "] bytes");
+
+    if (rsp.body_fd == -1)
+        ft_log("Body Content  : [" << rsp.body << "]");
+    else
+        ft_log("Body Content  : [Stored in file descriptor "
+               << rsp.body_fd << "]");
+
+    ft_log("========================================\n");
+}
+
 
 int set_non_blocking(int fd){
   if(fcntl(fd, F_SETFL, O_NONBLOCK) < 0)      
@@ -50,9 +86,11 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client
   new_client.w_bytes = 0;
   new_client.tr_bytes = 0;
   new_client.tw_bytes = 0;
-  new_client.server_fd = listenFd;
+  new_client.localHost = server.ip;
+  new_client.localPort = server.port;
   new_client.t_out = get_time();
   new_client.status = READ;
+  new_client.rsp.body_fd = -1;
   new_client.parser.setMaxBodySize(server.max_size);
   if(!clients.insert(std::make_pair(new_fd, new_client)).second){
     std::cerr << "Error: Client fd already exists in map\n";
@@ -169,6 +207,7 @@ int connection_handler(Config &cfg){
   }
   
   while(true){
+    // std::cout << "hi\n";
     if(pollfds.empty()){
       std::cerr << "All sockets (server and client) were closed\n";
       break;
@@ -190,7 +229,11 @@ int connection_handler(Config &cfg){
       typefd type = CLIENT;
 
       for(size_t j = serverfds.size(); j > 0;){
-        j--;
+      // ft_log("bye");
+      j--;
+        
+      
+      // std::cout << serverfds[j].ip << ":" << serverfds[j].port << "\n";
         if(pollfds[i].fd != serverfds[j].fd)
           continue;
 
@@ -206,8 +249,10 @@ int connection_handler(Config &cfg){
         break;
       }
 
+
       if(type == SERVER || clients.empty()) continue; // if not server, its client, but if client isn't added yet then unused fd in pollfds
 
+      // ft_log("Hi im a new client! :DDDD");
       std::map<int, Client>::iterator found = clients.find(pollfds[i].fd);
       if(found == clients.end()){ // IMPORTANT: add check for CGI pipe, this skips the moment its not a client fd
         close(pollfds[i].fd);
@@ -250,6 +295,7 @@ int connection_handler(Config &cfg){
           crnt_client.t_out = get_time();
 
           // TODO: generate a response
+          ft_log("here");
           
           continue;
         }
@@ -263,12 +309,23 @@ int connection_handler(Config &cfg){
           continue;
         }
 
+        if(crnt_client.parser.has_error()){
+          
+        }
+
         if(crnt_client.parser.is_complete()){
           
           crnt_client.r_bytes = 0;
           crnt_client.status = WRITE; 
           pollfds[i].events = POLLOUT;
-          crnt_client.t_out = get_time(); 
+          crnt_client.t_out = get_time();
+          crnt_client.parsed_req = crnt_client.parser.get_request();
+          crnt_client.parsed_req.localHost = crnt_client.localHost; 
+          crnt_client.parsed_req.localPort = crnt_client.localPort; 
+          Execution exec_client(crnt_client);
+          exec_client.ft_handle_resource(crnt_client, cfg);
+          ft_log_response(crnt_client.rsp);
+          ft_log("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         }
 
         // [ ... ] call the parse and CGI functions, must communicate when client is removed

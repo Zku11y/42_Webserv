@@ -10,15 +10,11 @@
 struct HttpRequest
 {
 	std::string							method;
-
 	std::string							target;
 	std::string							path;
     std::string							queryString;
-
 	std::string							version;
-
 	std::map<std::string, std::string>	headers;
-	
 	std::string							body;
 
 	std::string							host;
@@ -26,8 +22,6 @@ struct HttpRequest
 
 	std::string							localHost;
 	int									localPort;
-
-
 };
 
 class HttpParser
@@ -63,7 +57,6 @@ class HttpParser
 		size_t		chunk_size;
 		size_t		chunk_received;
 		size_t		max_body_size;
-		
 		HttpRequest	request;
 
 		bool	parse_request_line(std::string& buffer);

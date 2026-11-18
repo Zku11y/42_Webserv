@@ -21,7 +21,7 @@ class ConfigParser
 
 		std::map<std::string, LocationHandler> _locationHandlers;
 		std::map<std::string, ServerHandler> _serverHandlers;
-		
+
 		void		readFile();
 		void		tokenize();
 
@@ -39,7 +39,7 @@ class ConfigParser
 		void		parseServerName(ServerConfig& server);
 		void		parseClientMaxBodySize(ServerConfig& server);
 		void		parseErrorPage(ServerConfig& server);
-		
+
 		void		parseMethods(LocationConfig& location);
 		void		parseRoot(LocationConfig& location);
 		void		parseIndex(LocationConfig& location);

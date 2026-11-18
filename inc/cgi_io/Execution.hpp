@@ -21,11 +21,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 
-#include "../http/http.hpp"
-#include "../http/config.hpp"
 #include "../core/server.hpp"
-#include "../http/HttpResponse.hpp"
-
 
 #define ft_log_(x) std::cout << x
 #define ft_log(x) std::cout << x << std::endl

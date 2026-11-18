@@ -15,7 +15,7 @@
 #include <cstdio>
 
 #include "./http/config.hpp"
-#include "./core/server.hpp"
+#include "./http/client.hpp"
 #include "./cgi_io/Execution.hpp"
 
 #define PORT 8080

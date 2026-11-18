@@ -1,9 +1,9 @@
 CC = c++
 
-CFLAGS = -Wall -Werror -Wextra -std=c++98
+CFLAGS = -Wall -Werror -Wextra -std=c++98 -g -fsanitize=address
 # CFLAGS =  -std=c++98
 
-SRC =   src/core/server.cpp\
+SRC = 	src/core/server.cpp\
 		src/http/config.cpp\
 		src/http/configParser.cpp\
 		src/http/http.cpp\
@@ -12,7 +12,7 @@ SRC =   src/core/server.cpp\
 
 OBJ = $(SRC:.cpp=.o)
 
-HEAD =  inc/core/server.hpp\
+HEAD = 	inc/core/server.hpp\
 		inc/http/config.hpp\
 		inc/http/configParser.hpp\
 		inc/http/http.hpp\

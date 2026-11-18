@@ -4,7 +4,8 @@
 #include "../http/http.hpp"
 #include "../http/config.hpp"
 #include "../http/configParser.hpp"
-#include "../http/HttpResponse.hpp"
+#include "../http/response.hpp"
+
 
 #include <bits/types/struct_timeval.h>
 #include <iostream>
@@ -26,6 +27,8 @@
 #define T_OUT 500
 #define W_BUFF_SIZE 4096
 #define R_BUFF_SIZE 4096
+
+#define ft_log(x) std::cout << x << std::endl
 
 enum states{
   READ,
@@ -57,7 +60,8 @@ typedef struct client_info{
   size_t tr_bytes; // REVIEW: parsed or already read bytes, so that the parser
   size_t w_bytes;   //         doesn't have to re-parse everything everytime
   size_t r_bytes;
-  int server_fd;
+  int localPort;
+  std::string localHost; // REVIEW: server socket could error, causing segfault
   size_t max_size;
   
   double t_out;

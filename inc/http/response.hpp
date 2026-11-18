@@ -14,6 +14,7 @@ struct HttpResponse
 
 	int									body_fd;
 	size_t								body_size;
+	std::string           responc; // response buffer merging headers and body
 };
 
 class	HttpResponseBuilder{
@@ -26,11 +27,11 @@ class	HttpResponseBuilder{
 		bool		valid_header_name(const std::string& name) const;
 		bool		is_token_char(char c) const;
 		bool		valid_header_value(const std::string& value) const;
-		std::string	read_body_fd(int body_fd) const;
+		std::string	read_body_fd(int body_fd, size_t m_size) const;
 
 	public:
 		HttpResponseBuilder();
 		~HttpResponseBuilder();
 
-		std::string	build(HttpResponse&	response);
+		void	build(HttpResponse&	response);
 };

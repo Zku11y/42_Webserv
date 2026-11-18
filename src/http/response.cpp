@@ -89,8 +89,7 @@ bool	HttpResponseBuilder::valid_header_value(const std::string& value) const{
 	return true;
 }
 
-std::string HttpResponseBuilder::read_body_fd(int body_fd) const{
-	const size_t	m_size = 1024^2;
+std::string HttpResponseBuilder::read_body_fd(int body_fd, size_t m_size) const{
 	std::string 	result;
 	char			buffer[8192];
 	ssize_t			bytes;
@@ -114,22 +113,21 @@ std::string HttpResponseBuilder::read_body_fd(int body_fd) const{
 	return result;
 }
 
-std::string HttpResponseBuilder::build(HttpResponse& response)
+void HttpResponseBuilder::build(HttpResponse& response)
 {
-	std::string         result;
 	std::stringstream   ss;
 	std::map<std::string, std::string>::const_iterator  it;
-	const size_t MAX_INLINE_BODY = 1024 * 1024;
+	const size_t MAX_INLINE_BODY = 100 * 1024 * 1024;
 
 	ss.imbue(std::locale::classic());
 	if (status_message.find(response.status_code) == status_message.end())
 		response.status_code = 500;
-	result += "HTTP/1.1 ";
+	response.responc += "HTTP/1.1 ";
 	ss << response.status_code;
-	result += ss.str();
-	result += " ";
-	result += gen_phrase(response.status_code);
-	result += "\r\n";
+	response.responc += ss.str();
+	response.responc += " ";
+	response.responc += gen_phrase(response.status_code);
+	response.responc += "\r\n";
 
 	ss.str("");
 	ss.clear();
@@ -148,24 +146,18 @@ std::string HttpResponseBuilder::build(HttpResponse& response)
 		ss << response.body_size;
 		response.headers["Content-Length"] = ss.str();
 	}
-if (response.body_fd == -1)
-		result += response.body;
-	else if (response.body_size <= MAX_INLINE_BODY)
-		result += read_body_fd(response.body_fd);
 
 	for (it = response.headers.begin(); it != response.headers.end(); it++){
 		if (!valid_header_name(it->first) || !valid_header_value(it->second))
 			continue;
-		result += it->first;
-		result += ": ";
-		result += it->second;
-		result += "\r\n";
+		response.responc += it->first;
+		response.responc += ": ";
+		response.responc += it->second;
+		response.responc += "\r\n";
 	}
-	result += "\r\n";
+	response.responc += "\r\n";
 	if (response.body_fd == -1)
-		result += response.body;
+		response.responc += response.body;
 	else if (response.body_size <= MAX_INLINE_BODY)
-		result += read_body_fd(response.body_fd);
-
-	return result;
+		response.responc += read_body_fd(response.body_fd, MAX_INLINE_BODY);
 }

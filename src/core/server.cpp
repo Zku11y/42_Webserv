@@ -16,7 +16,46 @@
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
+static void ft_log_request(const HttpRequest& req)
+{
+    ft_log("\n========================================");
+    ft_log("          PARSED HTTP REQUEST");
+    ft_log("========================================");
 
+    // Connection information
+    ft_log("\n[CONNECTION]");
+    ft_log("Local Host    : [" << req.localHost << "]");
+    ft_log("Local Port    : [" << req.localPort << "]");
+
+    // Request line
+    ft_log("\n[REQUEST LINE]");
+    ft_log("Method        : [" << req.method << "]");
+    ft_log("Target        : [" << req.target << "]");
+    ft_log("Path          : [" << req.path << "]");
+    ft_log("Query String  : [" << req.queryString << "]");
+    ft_log("HTTP Version  : [" << req.version << "]");
+
+    // Parsed Host header
+    ft_log("\n[HOST]");
+    ft_log("Host          : [" << req.host << "]");
+    ft_log("Port          : [" << req.port << "]");
+
+    // Headers
+    // ft_log("\n[HEADERS] (" << req.headers.size() << ")");
+
+    // for (std::map<std::string, std::string>::const_iterator it =
+    //      req.headers.begin(); it != req.headers.end(); ++it)
+    // {
+    //     ft_log("  " << it->first << " : [" << it->second << "]");
+    // }
+
+    // Body
+    ft_log("\n[BODY]");
+    ft_log("Body Size     : " << req.body.size() << " bytes");
+    ft_log("Body Content  : [" << req.body << "]");
+
+    ft_log("========================================\n");
+}
 static void ft_log_response(const HttpResponse& rsp)
 {
     ft_log("\n========================================");
@@ -322,10 +361,14 @@ int connection_handler(Config &cfg){
           crnt_client.parsed_req = crnt_client.parser.get_request();
           crnt_client.parsed_req.localHost = crnt_client.localHost; 
           crnt_client.parsed_req.localPort = crnt_client.localPort; 
+          ft_log_request(crnt_client.parsed_req);
           Execution exec_client(crnt_client);
           exec_client.ft_handle_resource(crnt_client, cfg);
           ft_log_response(crnt_client.rsp);
           ft_log("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+          HttpResponseBuilder builder;
+          builder.build(crnt_client.rsp);
         }
 
         // [ ... ] call the parse and CGI functions, must communicate when client is removed
@@ -336,20 +379,25 @@ int connection_handler(Config &cfg){
       }
 
       if(pollfds[i].revents & POLLOUT){
-        ssize_t bytes_left = crnt_client.response_buffer.size() - crnt_client.tw_bytes;
-        ssize_t res = send(pollfds[i].fd, crnt_client.response_buffer.c_str() + crnt_client.tw_bytes,
+ 
+      //	else if (crnt_client.rsp.body_size <= MAX_INLINE_BODY)
+      // 
+  
+        ssize_t bytes_left = crnt_client.rsp.responc.size() - crnt_client.tw_bytes;
+        ssize_t res = send(pollfds[i].fd, crnt_client.rsp.responc.c_str() + crnt_client.tw_bytes,
                                 bytes_left >= W_BUFF_SIZE ? W_BUFF_SIZE : bytes_left, MSG_NOSIGNAL);
 
         if(res > 0){
       
-          if(crnt_client.tw_bytes + res == crnt_client.response_buffer.size()){
+          if(crnt_client.tw_bytes + res == crnt_client.rsp.responc.size()){
             switch(crnt_client.status){
               case WRITE:
                 crnt_client.status = READ;
                 pollfds[i].events = POLLIN;
                 crnt_client.tw_bytes = 0;
                 crnt_client.w_bytes = 0;
-                crnt_client.response_buffer.clear();
+                crnt_client.rsp.responc.clear();
+                crnt_client.parser.reset();
                 break;
               case WRITE_THEN_CLOSE:
                 close(pollfds[i].fd);
@@ -378,6 +426,8 @@ int connection_handler(Config &cfg){
         }
       }
      
+      
+    
     } // for()
         
   } // while()

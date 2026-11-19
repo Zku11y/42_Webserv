@@ -16,7 +16,7 @@
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
-static void ft_log_request(const HttpRequest& req)
+void ft_log_request(const HttpRequest& req)
 {
     ft_log("\n========================================");
     ft_log("          PARSED HTTP REQUEST");
@@ -56,7 +56,7 @@ static void ft_log_request(const HttpRequest& req)
 
     ft_log("========================================\n");
 }
-static void ft_log_response(const HttpResponse& rsp)
+void ft_log_response(const HttpResponse& rsp)
 {
     ft_log("\n========================================");
     ft_log("          HTTP RESPONSE");
@@ -361,11 +361,11 @@ int connection_handler(Config &cfg){
           crnt_client.parsed_req = crnt_client.parser.get_request();
           crnt_client.parsed_req.localHost = crnt_client.localHost; 
           crnt_client.parsed_req.localPort = crnt_client.localPort; 
-          ft_log_request(crnt_client.parsed_req);
+         ft_log_request(crnt_client.parsed_req);
           Execution exec_client(crnt_client);
           exec_client.ft_handle_resource(crnt_client, cfg);
-          ft_log_response(crnt_client.rsp);
-          ft_log("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+         ft_log_response(crnt_client.rsp);
+//          ft_log("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
           HttpResponseBuilder builder;
           builder.build(crnt_client.rsp);
@@ -382,47 +382,85 @@ int connection_handler(Config &cfg){
  
       //	else if (crnt_client.rsp.body_size <= MAX_INLINE_BODY)
       // 
+
+        if(crnt_client.rsp.body_fd != -1 && crnt_client.tw_bytes == crnt_client.rsp.responc.size()){
+
+//          std::cout << "ITS USING THE BODY_FD FINALLYYYYYYYYY\n";
+    
+          char buff[W_BUFF_SIZE];
+          if(crnt_client.response_buffer.empty()){
+            ssize_t red = read(crnt_client.rsp.body_fd, buff, sizeof(buff));
   
-        ssize_t bytes_left = crnt_client.rsp.responc.size() - crnt_client.tw_bytes;
-        ssize_t res = send(pollfds[i].fd, crnt_client.rsp.responc.c_str() + crnt_client.tw_bytes,
-                                bytes_left >= W_BUFF_SIZE ? W_BUFF_SIZE : bytes_left, MSG_NOSIGNAL);
-
-        if(res > 0){
-      
-          if(crnt_client.tw_bytes + res == crnt_client.rsp.responc.size()){
-            switch(crnt_client.status){
-              case WRITE:
-                crnt_client.status = READ;
-                pollfds[i].events = POLLIN;
-                crnt_client.tw_bytes = 0;
-                crnt_client.w_bytes = 0;
-                crnt_client.rsp.responc.clear();
-                crnt_client.parser.reset();
-                break;
-              case WRITE_THEN_CLOSE:
-                close(pollfds[i].fd);
-                clients.erase(found);
-                pollfds.erase(pollfds.begin() + i);
-                continue;
-              default:
-                break;
+            if(red > 0){
+              crnt_client.response_buffer.append(buff, red);
             }
-          }
-          else{
-            crnt_client.w_bytes = res;
-            crnt_client.tw_bytes += res;
-          }
+            if(red == 0){
+              close(crnt_client.rsp.body_fd); // should i close this fd or do the other's code close it?
+              crnt_client.rsp.body_fd = -1;
+            }
 
-           crnt_client.t_out = get_time();
+          }
+          if(!crnt_client.response_buffer.empty()){
+             ssize_t res = send(pollfds[i].fd, crnt_client.response_buffer.c_str(), crnt_client.response_buffer.size(), MSG_NOSIGNAL);
+
+            if(res > 0){
+
+             crnt_client.response_buffer = crnt_client.response_buffer.substr(res, crnt_client.response_buffer.size());
+             crnt_client.t_out = get_time();
+            }
+
+            if(res < 0){
+              close(pollfds[i].fd);
+              close(crnt_client.rsp.body_fd);
+              clients.erase(found);
+              pollfds.erase(pollfds.begin() + i);
+              continue;
+            } 
+          }
+          
+          continue;
         }
 
-        // if res == 0 : ignore and move on. if we keep getting 0 timeout will eventually stop it
+        if(crnt_client.tw_bytes < crnt_client.rsp.responc.size()){
+          ssize_t bytes_left = crnt_client.rsp.responc.size() - crnt_client.tw_bytes;
+          ssize_t res = send(pollfds[i].fd, crnt_client.rsp.responc.c_str() + crnt_client.tw_bytes,
+                                bytes_left >= W_BUFF_SIZE ? W_BUFF_SIZE : bytes_left, MSG_NOSIGNAL);
 
-        if(res < 0){
-          close(pollfds[i].fd);
-          clients.erase(found);
-          pollfds.erase(pollfds.begin() + i);
-          continue;           
+          if(res > 0){
+            crnt_client.w_bytes = res;
+            crnt_client.tw_bytes += res;
+            crnt_client.t_out = get_time();
+          }
+
+          // if res == 0 : ignore and move on. if we keep getting 0 timeout will eventually stop it
+
+          if(res < 0){
+            close(pollfds[i].fd);
+            clients.erase(found);
+            pollfds.erase(pollfds.begin() + i);
+            continue;
+          }
+        }
+
+        if(crnt_client.response_buffer.empty() && crnt_client.rsp.body_fd == -1 && crnt_client.tw_bytes == crnt_client.rsp.responc.size()){
+          switch(crnt_client.status){
+            case WRITE:
+              crnt_client.status = READ;
+              pollfds[i].events = POLLIN;
+              crnt_client.tw_bytes = 0;
+              crnt_client.w_bytes = 0;
+              crnt_client.rsp.responc.clear();
+              crnt_client.parser.reset();
+              crnt_client.response_buffer.clear();
+              break;
+            case WRITE_THEN_CLOSE:
+              close(pollfds[i].fd);
+              clients.erase(found);
+              pollfds.erase(pollfds.begin() + i);
+              continue;
+            default:
+              break;
+          }
         }
       }
      
@@ -436,13 +474,12 @@ int connection_handler(Config &cfg){
 
 int main(int ac, char **av){
 
-  if(ac != 2){
-  // TODO: add explicit message about program arguments
-    return 1;
-  }
+  std::string configFile;
+  configFile = (ac != 2) ? "default.conf" : av[1];
+
 
   try{
-    Config cfg(av[1]);
+    Config cfg(configFile);
     connection_handler(cfg);
 
   }catch(std::exception &e){

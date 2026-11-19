@@ -25,8 +25,8 @@
 #define SK_PORT 8080
 #define BACKLOG_MAX SOMAXCONN
 #define T_OUT 500
-#define W_BUFF_SIZE 4096
-#define R_BUFF_SIZE 4096
+#define W_BUFF_SIZE 24096
+#define R_BUFF_SIZE 24096
 
 #define ft_log(x) std::cout << x << std::endl
 

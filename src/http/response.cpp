@@ -117,7 +117,7 @@ void HttpResponseBuilder::build(HttpResponse& response)
 {
 	std::stringstream   ss;
 	std::map<std::string, std::string>::const_iterator  it;
-	const size_t MAX_INLINE_BODY = 100 * 1024 * 1024;
+	const size_t MAX_INLINE_BODY = 1024;
 
 	ss.imbue(std::locale::classic());
 	if (status_message.find(response.status_code) == status_message.end())

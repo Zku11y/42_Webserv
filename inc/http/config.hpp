@@ -21,10 +21,12 @@ class LocationConfig
 
 		std::map<std::string, std::string>	_cgi;
 
+		bool	validLocationPath(const std::string& path) const;
 		void	validateMethods() const;
 		void	validateReturn() const;
 		void	validateUpload() const;
 		void	validateCgi() const;
+		void	validateIndex() const;
 
 	public:
 		LocationConfig();

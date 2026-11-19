@@ -44,22 +44,66 @@ void	LocationConfig::validateUpload() const{
 
 void	LocationConfig::validateCgi() const{
 	std::map<std::string, std::string>::const_iterator	it = _cgi.begin();
+
 	while (it != _cgi.end()){
 		if (it->first.empty() || it->first[0] != '.')
 			throw std::runtime_error("CGI extension must start with a '.'");
+		if (it->first.size() == 1)
+			throw std::runtime_error("CGI extension cannot be empty");
+		if (it->first.find('/') != std::string::npos)
+			throw std::runtime_error("CGI extension cannot contain '/'");
+		if (it->first.find('.', 1) != std::string::npos)
+			throw std::runtime_error("CGI extension cannot contain multiple dots");
 		if (it->second.empty())
 			throw std::runtime_error("CGI interpreter cannot be empty");
 		it++;
 	}
 }
 
+bool	LocationConfig::validLocationPath(const std::string& path) const{
+	size_t	start;
+	size_t	end;
+	std::string	part;
+
+	if (path.empty() || path[0] != '/')
+		return false;
+	start = 1;
+	while (start < path.size()){
+		end = path.find('/', start);
+		if (end == std::string::npos)
+			end = path.size();
+		part = path.substr(start, end - start);
+		if (part == "." || part == "..")
+			return false;
+		if (part.empty() && end != path.size())
+			return false;
+		start = end + 1;
+	}
+	return true;
+}
+
+void	LocationConfig::validateIndex() const{
+	if (_index.empty()){
+		if (_autoindex)
+			throw std::runtime_error("autoindex requires an index filename");
+		return;
+	}
+	if (_index == "." || _index == "..")
+		throw std::runtime_error("Invalid index filename");
+	if (_index[0] == '/')
+		throw std::runtime_error("Index cannot be an absolute path");
+	if (_index.find('/') != std::string::npos)
+		throw std::runtime_error("Index must be a simple filename");
+}
+
 void	LocationConfig::validate() const{
-	if (_path.empty() || _path[0] != '/')
-		throw std::runtime_error("Location must start with '/'");
+	if (!validLocationPath(_path))
+		throw std::runtime_error("Invalid location path: " + _path);
 	validateMethods();
 	validateReturn();
 	validateUpload();
 	validateCgi();
+	validateIndex();
 	if (_returnCode == 0 && _root.empty())
 		throw std::runtime_error("Location requires root unless it redirects");
 }

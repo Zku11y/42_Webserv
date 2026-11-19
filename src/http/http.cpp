@@ -47,13 +47,16 @@ bool	HttpParser::parse_request_line(std::string& buffer){
 	}
 	query = request.target.find('?');
 	if (query == std::string::npos){
-		request.path = request.target;
+		request.OG_path = request.target;
 		request.queryString.clear();
 	}
 	else{
-		request.path = request.target.substr(0, query);
+		request.OG_path = request.target.substr(0, query);
 		request.queryString = request.target.substr(query + 1);
 	}
+	request.path = decode_path(request.OG_path);
+	if (request.path.empty())
+		return set_error(BAD_REQUEST);
 	buffer.erase(0, end + 2);
 	state = HEADERS;
 	return true;

@@ -295,6 +295,72 @@ bool	HttpParser::valid_target(const std::string& target) const{
 	return true;
 }
 
+int	HttpParser::hex_value(char c) const{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+	return -1;
+}
+
+bool	HttpParser::valid_decoded_path(const std::string& path) const{
+	unsigned char	x;
+	std::string		part;
+	size_t			start;
+	size_t			end;
+
+	if (path.empty() || path[0] != '/')
+		return false;
+
+	for (size_t a = 0; a < path.size(); a++){
+		x = static_cast<unsigned char>(path[a]);
+		if (x < 32 || x == 127)
+			return false;
+	}
+	start = 1;
+	while (start < path.size())
+	{
+		end = path.find('/', start);
+		if (end == std::string::npos)
+			end = path.size();
+		part = path.substr(start, end - start);
+		if (part == "." || part == "..")
+			return false;
+		start = end + 1;
+	}
+	return true;
+}
+
+std::string	HttpParser::decode_path(const std::string& path) const{
+	std::string	result;
+	int			high;
+	int			low;
+	size_t		a;
+
+	a = 0;
+	while (a < path.size()){
+		if (path[a] == '%'){
+			if (a + 2 >= path.size())
+				return "";
+			high = hex_value(path[a + 1]);
+			low = hex_value(path[a + 2]);
+			if (high == -1 && low == -1)
+				return "";
+			result += static_cast<char>(high * 16 + low);
+			a += 3;
+		}
+		else{
+			result += path[a];
+			a++;
+		}
+	}
+	if (!valid_decoded_path(result))
+		return "";
+	return result;
+}
+
 HttpParser::ErrorCode	HttpParser::get_error_code() const{
 	return error_code;
 }

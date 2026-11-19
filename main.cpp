@@ -1,92 +1,209 @@
-#include <iostream>
-#include <map>
-#include <string>
+// #include <iostream>
+// #include <map>
+// #include <vector>
+// #include "inc/http/config.hpp"
+
+// void	printLocation(const LocationConfig& location)
+// {
+// 	const std::vector<std::string>& methods = location.getMethods();
+// 	const std::map<std::string, std::string>& cgi = location.getCGI();
+// 	size_t i;
+
+// 	std::cout << "\tlocation " << location.getPath() << " {" << std::endl;
+
+// 	std::cout << "\t\tmethods";
+// 	i = 0;
+// 	while (i < methods.size())
+// 	{
+// 		std::cout << " " << methods[i];
+// 		i++;
+// 	}
+// 	std::cout << ";" << std::endl;
+
+// 	if (!location.getRoot().empty())
+// 		std::cout << "\t\troot " << location.getRoot() << ";" << std::endl;
+
+// 	if (!location.getIndex().empty())
+// 		std::cout << "\t\tindex " << location.getIndex() << ";" << std::endl;
+
+// 	std::cout << "\t\tautoindex "
+// 		<< (location.getAutoindex() ? "on" : "off")
+// 		<< ";" << std::endl;
+
+// 	std::cout << "\t\tupload_enable "
+// 		<< (location.getUploadEnable() ? "on" : "off")
+// 		<< ";" << std::endl;
+
+// 	if (!location.getUploadStore().empty())
+// 		std::cout << "\t\tupload_store "
+// 			<< location.getUploadStore() << ";" << std::endl;
+
+// 	if (location.getReturnCode() != 0)
+// 	{
+// 		std::cout << "\t\treturn "
+// 			<< location.getReturnCode() << " "
+// 			<< location.getReturnTarget()
+// 			<< ";" << std::endl;
+// 	}
+
+// 	std::map<std::string, std::string>::const_iterator it;
+// 	it = cgi.begin();
+// 	while (it != cgi.end())
+// 	{
+// 		std::cout << "\t\tcgi_ext "
+// 			<< it->first << " "
+// 			<< it->second << ";"
+// 			<< std::endl;
+// 		++it;
+// 	}
+
+// 	std::cout << "\t}" << std::endl;
+// }
+
+// void	printConfig(const Config& config)
+// {
+// 	const std::vector<ServerConfig>& servers = config.getServers();
+// 	size_t i;
+
+// 	i = 0;
+// 	while (i < servers.size())
+// 	{
+// 		const ServerConfig& server = servers[i];
+
+// 		std::cout << "server {" << std::endl;
+
+// 		std::cout << "\tlisten "
+// 			<< server.getPort() << ";" << std::endl;
+
+// 		std::cout << "\thost "
+// 			<< server.getHost() << ";" << std::endl;
+
+// 		if (!server.getServerName().empty())
+// 			std::cout << "\tserver_name "
+// 				<< server.getServerName() << ";" << std::endl;
+
+// 		std::cout << "\tclient_max_body_size "
+// 			<< server.getClientMaxBodySize()
+// 			<< " bytes;" << std::endl;
+
+// 		const std::map<int, std::string>& errors =
+// 			server.getErrorPages();
+
+// 		std::map<int, std::string>::const_iterator error;
+// 		error = errors.begin();
+// 		while (error != errors.end())
+// 		{
+// 			std::cout << "\terror_page "
+// 				<< error->first << " "
+// 				<< error->second << ";"
+// 				<< std::endl;
+// 			++error;
+// 		}
+
+// 		const std::vector<LocationConfig>& locations =
+// 			server.getLocations();
+
+// 		size_t j = 0;
+// 		while (j < locations.size())
+// 		{
+// 			std::cout << std::endl;
+// 			printLocation(locations[j]);
+// 			j++;
+// 		}
+
+// 		std::cout << "}" << std::endl;
+
+// 		if (i + 1 < servers.size())
+// 			std::cout << std::endl;
+
+// 		i++;
+// 	}
+// }
+
+// int main(int ac, char **av)
+// {
+// 	if (ac != 2)
+// 	{
+// 		std::cerr << "Usage: " << av[0] << " <config_file>" << std::endl;
+// 		return 1;
+// 	}
+// 	try
+// 	{
+// 		Config config(av[1]);
+// 		std::cout << "CONFIG VALID" << std::endl;
+// 		// printConfig(config);
+// 	}
+// 	catch (const std::exception& e)
+// 	{
+// 		std::cerr << "CONFIG ERROR: " << e.what() << std::endl;
+// 		return 1;
+// 	}
+// 	return 0;
+// }
+
 #include "inc/http/http.hpp"
+#include <iostream>
+#include <string>
 
-static const char *state_name(HttpParser::State state)
+static void	test_request(const std::string& target)
 {
-    if (state == HttpParser::REQUEST_LINE) return "REQUEST_LINE";
-    if (state == HttpParser::HEADERS) return "HEADERS";
-    if (state == HttpParser::BODY_CONTENT_LENGTH) return "BODY_CONTENT_LENGTH";
-    if (state == HttpParser::CHUNK_SIZE) return "CHUNK_SIZE";
-    if (state == HttpParser::CHUNK_DATA) return "CHUNK_DATA";
-    if (state == HttpParser::CHUNK_TRAILERS) return "CHUNK_TRAILERS";
-    if (state == HttpParser::COMPLETE) return "COMPLETE";
-    if (state == HttpParser::ERROR) return "ERROR";
-    return "UNKNOWN";
-}
+	HttpParser			parser(1024 * 1024);
+	std::string			buffer;
+	const HttpRequest	*request;
 
-static void run_test(const std::string& name, const std::string& raw,
-    HttpParser::State expected, bool future_rule)
-{
-    HttpParser parser(1024);
-    std::string buffer = raw;
-    const HttpRequest *req;
-    std::map<std::string, std::string>::const_iterator it;
+	buffer = "GET " + target + " HTTP/1.1\r\n";
+	buffer += "Host: localhost\r\n";
+	buffer += "\r\n";
 
-    parser.parse(buffer);
-    req = &parser.get_request();
-    std::cout << "\n========================================\n";
-    std::cout << "TEST: " << name << "\n";
-    std::cout << "Expected: " << state_name(expected) << "\n";
-    if (future_rule)
-        std::cout << "NOTE: Host-value validation not implemented yet\n";
-    std::cout << "Actual:   " << state_name(parser.get_state()) << "\n";
-    std::cout << "RESULT: "
-        << (parser.get_state() == expected ? "PASS" : "FAIL") << "\n";
-    std::cout << "--- Parsed HttpRequest ---\n";
-    std::cout << "Method:  [" << req->method << "]\n";
-    std::cout << "Target:  [" << req->target << "]\n";
-    std::cout << "Path:    [" << req->path << "]\n";
-    std::cout << "Query:   [" << req->queryString << "]\n";
-    std::cout << "Version: [" << req->version << "]\n";
-    std::cout << "Headers:\n";
-    for (it = req->headers.begin(); it != req->headers.end(); ++it){
-        std::cout << "  [" << it->first << "] = [" << it->second << "]\n";
+	std::cout << "========================================\n";
+	std::cout << "INPUT: " << target << "\n";
+
+	parser.parse(buffer);
+
+	if (parser.get_state() == HttpParser::ERROR)
+	{
+		std::cout << "RESULT: ERROR\n";
+		return;
 	}
-	std::cout << "Host:    [" << req->host << "]\n";
-	std::cout << "Port:    [" << req->port << "]\n";
-    std::cout << "Body:    [" << req->body << "]\n";
-    std::cout << "Remaining buffer: [" << buffer << "]\n";
+
+	request = &parser.get_request();
+
+	std::cout << "RESULT:      OK\n";
+	std::cout << "target:      [" << request->target << "]\n";
+	std::cout << "OG_path:     [" << request->OG_path << "]\n";
+	std::cout << "path:        [" << request->path << "]\n";
+	std::cout << "queryString: [" << request->queryString << "]\n";
 }
 
-int main()
+int	main()
 {
-	run_test(
-	"19 - Valid custom method",
-	"BANANA / HTTP/1.1\r\n"
-	"Host: localhost\r\n"
-	"\r\n",
-	HttpParser::COMPLETE,
-	false
-);
+	std::cout << "\n--- VALID PATHS ---\n";
 
-run_test(
-	"20 - Valid method with hyphen",
-	"CUSTOM-METHOD / HTTP/1.1\r\n"
-	"Host: localhost\r\n"
-	"\r\n",
-	HttpParser::COMPLETE,
-	false
-);
+	test_request("/hello");
+	test_request("/hello%20world");
+	test_request("/file%2Etxt");
+	test_request("/file%2etxt");
+	test_request("/%41%42%43");
+	test_request("/hello%20world?name=test");
 
-run_test(
-	"21 - Invalid method with @",
-	"GE@T / HTTP/1.1\r\n"
-	"Host: localhost\r\n"
-	"\r\n",
-	HttpParser::ERROR,
-	false
-);
+	std::cout << "\n--- INVALID / DANGEROUS PATHS ---\n";
 
-run_test(
-	"22 - Invalid method with slash",
-	"GET/TEST / HTTP/1.1\r\n"
-	"Host: localhost\r\n"
-	"\r\n",
-	HttpParser::ERROR,
-	false
-);
+	test_request("/../secret");
+	test_request("/%2E%2E/secret");
+	test_request("/uploads/%2e%2e/secret");
+	test_request("/./index.html");
+	test_request("/%2E/index.html");
+
+	std::cout << "\n--- INVALID ENCODING ---\n";
+
+	test_request("/test%00file");
+	test_request("/test%0Afile");
+	test_request("/test%0Dfile");
+	test_request("/test%09file");
+	test_request("/test%7Ffile");
+	test_request("/test%GG");
+	test_request("/test%2");
+	test_request("/test%");
+
 	return 0;
 }
-

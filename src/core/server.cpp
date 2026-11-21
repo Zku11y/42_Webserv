@@ -195,6 +195,7 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
   int host = convert_ip(ip);
 
  if (host < 0) {
+      close(listenFd);
       std::cerr << "Invalid IP address format.\n";
       return 1;
  }
@@ -348,11 +349,43 @@ int connection_handler(Config &cfg){
           continue;
         }
 
-        if(crnt_client.parser.has_error()){
-          
+        // if(crnt_client.parser.has_error()){
+        //   crnt_client.r_bytes = 0;
+        //   crnt_client.status = WRITE;
+        //   pollfds[i].events = POLLOUT;
+        //   crnt_client.t_out = get_time();
+        //   crnt_client.parsed_req = crnt_client.parser.get_request();
+        //   crnt_client.parsed_req.localHost = crnt_client.localHost;
+        //   crnt_client.parsed_req.localPort = crnt_client.localPort;
+        //   Execution exec_client(crnt_client);
+        //   exec_client.ft_handle_error_2(crnt_client, crnt_client.parser.get_error_code());
+        //   HttpResponseBuilder builder;
+        //   builder.build(crnt_client.rsp);
+        // }
+
+        if (crnt_client.parser.has_error()) {
+            ft_log("its a fucking errorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr");
+    
+            const int error_code = crnt_client.parser.get_error_code();
+            
+
+            crnt_client.parsed_req = HttpRequest();
+            ft_log_request(crnt_client.parsed_req);
+            Execution exec_client(crnt_client);
+            exec_client.ft_handle_error_2(crnt_client, error_code);
+            ft_log_response(crnt_client.rsp);
+            crnt_client.rsp.headers["Connection"] = "close";
+            HttpResponseBuilder builder;
+            builder.build(crnt_client.rsp);
+
+            crnt_client.r_bytes = 0;
+            crnt_client.status = WRITE_THEN_CLOSE;
+            crnt_client.t_out = get_time();
+            pollfds[i].events = POLLOUT;
+            continue;
         }
 
-        if(crnt_client.parser.is_complete()){
+        else if(crnt_client.parser.is_complete()){
           
           crnt_client.r_bytes = 0;
           crnt_client.status = WRITE; 
@@ -365,8 +398,6 @@ int connection_handler(Config &cfg){
           Execution exec_client(crnt_client);
           exec_client.ft_handle_resource(crnt_client, cfg);
          ft_log_response(crnt_client.rsp);
-//          ft_log("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-
           HttpResponseBuilder builder;
           builder.build(crnt_client.rsp);
         }

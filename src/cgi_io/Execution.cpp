@@ -975,6 +975,10 @@ std::string Execution::ft_mime_types()
         return "text/plain";
     else if (ext == "json")
         return "application/json";
+    else if (ext == "gltf")
+        return "model/gltf+json";
+    else if (ext == "ttf")
+        return "font/ttf";
     else if (ext == "png")
         return "image/png";
     else if (ext == "jpg" || ext == "jpeg")

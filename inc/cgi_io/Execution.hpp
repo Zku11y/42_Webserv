@@ -30,6 +30,9 @@
 
 class Execution
 {
+
+    friend int connection_handler(Config &cfg);
+
     private:
         int status;
 

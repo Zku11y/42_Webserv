@@ -9,7 +9,8 @@ SRC = 	src/core/server.cpp\
 		src/http/http.cpp\
 		src/http/http_helper.cpp\
 		src/http/response.cpp\
-		src/cgi_io/Execution.cpp
+		src/Execution/Exec_Rsp.cpp\
+		src/Execution/Exec_Cgi.cpp
 
 OBJ = $(SRC:.cpp=.o)
 
@@ -18,7 +19,7 @@ HEAD = 	inc/core/server.hpp\
 		inc/http/configParser.hpp\
 		inc/http/http.hpp\
 		inc/http/response.hpp\
-		inc/cgi_io/Execution.hpp
+		inc/Execution/Execution.hpp
 
 NAME = sr
 

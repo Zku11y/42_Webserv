@@ -1,0 +1,98 @@
+15. Complete implementation roadmap
+We will follow this order, reviewing each stage individually, exactly like we did for normal resource handling.
+CGI implementation checklist
+
+0/72
+
+
+Phase 1 — Architecture
+[ ] Define persistent CGI state structure
+[ ] Agree CGI state ownership with Dev 1
+[ ] Define DONE / ERROR / PENDING_CGI behavior
+[ ] Define CGI timeout and output limits
+[ ] Connect GET and POST CGI entry points
+
+
+Phase 2 — Preparation
+[ ] Prepare script filesystem path
+[ ] Prepare effective script URL, including CGI index
+[ ] Prepare working directory
+[ ] Prepare interpreter arguments
+[ ] Prepare CGI environment variables
+[ ] Build argv and envp arrays
+
+
+Phase 3 — Process creation
+[ ] Create stdin pipe
+[ ] Create stdout pipe
+[ ] Configure nonblocking parent descriptors
+[ ] Configure close-on-exec policy
+[ ] Implement fork handling
+[ ] Implement child FD cleanup
+[ ] Implement dup2 redirection
+[ ] Implement child chdir
+[ ] Implement execve
+[ ] Handle child setup failure
+
+
+Phase 4 — Parent and event loop
+[ ] Store child PID and parent descriptors
+[ ] Register CGI descriptors with Dev 1
+[ ] Implement partial request-body writes
+[ ] Implement stdin EOF signaling
+[ ] Implement partial CGI output reads
+[ ] Handle POLLHUP and buffered data
+[ ] Handle pipe errors and SIGPIPE
+[ ] Integrate simultaneous input/output events
+[ ] Implement waitpid WNOHANG
+[ ] Track child exit and stdout EOF independently
+
+
+Phase 5 — Output handling
+[ ] Find CGI header/body separator
+[ ] Parse CGI headers
+[ ] Validate Status header
+[ ] Handle Content-Type
+[ ] Handle CGI redirect responses
+[ ] Validate Content-Length
+[ ] Handle binary response bodies
+[ ] Filter unsafe response headers
+[ ] Build client.rsp
+
+
+Phase 6 — Failure handling
+[ ] Handle pipe creation failure
+[ ] Handle fork failure
+[ ] Handle execve failure
+[ ] Handle CGI I/O failure
+[ ] Handle invalid CGI output
+[ ] Handle output size limit
+[ ] Handle CGI timeout
+[ ] Handle client disconnection
+[ ] Terminate failed CGI process
+[ ] Reap child processes
+[ ] Verify no FD leaks or zombie processes
+
+
+Phase 7 — Testing
+[ ] Test GET CGI
+[ ] Test POST CGI
+[ ] Test query strings
+[ ] Test environment variables
+[ ] Test empty request body
+[ ] Test binary request body
+[ ] Test chunked request body
+[ ] Test CGI multipart request
+[ ] Test large CGI input
+[ ] Test large CGI output
+[ ] Test simultaneous CGI input and output
+[ ] Test relative file access
+[ ] Test CGI-generated redirects and errors
+[ ] Test invalid interpreter
+[ ] Test infinite execution
+[ ] Test early child termination
+[ ] Test multiple simultaneous CGI requests
+[ ] Test static requests while CGI is running
+[ ] Test Python CGI
+[ ] Test Bash CGI
+[ ] Perform final stress tests

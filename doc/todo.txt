@@ -1,0 +1,93 @@
+1. TODO — Remaining tasks before final submission
+Excluding the actual CGI implementation for now.
+
+Configuration and architecture
+- [ ] Confirm root-style vs alias-style path resolution.
+- [ ] Confirm _uploadStore mapping convention.
+- [ ] Resolve GET, POST and DELETE resource mapping consistency.
+- [ ] Confirm nonempty _root validation with Dev 2.
+- [ ] Confirm nonempty _uploadStore validation with Dev 2.
+- [ ] Confirm configured filesystem path validation.
+- [ ] Confirm location path validation and duplicate-location rejection.
+- [ ] Confirm index filename validation.
+- [ ] Confirm redirect status and target validation.
+- [ ] Resolve index selection bypassing more-specific locations.
+- [ ] Prevent CGI source disclosure through index selection.
+- [ ] Prevent overlapping upload and CGI execution directories.
+
+URL encoding and HTML escaping
+- [ ] Implement ft_url_encode().
+- [ ] Implement ft_html_escape().
+- [ ] Apply URL encoding to autoindex links.
+- [ ] Apply HTML escaping to autoindex filenames.
+- [ ] Apply HTML escaping to autoindex headings.
+- [ ] Apply URL encoding to automatic directory redirects.
+- [ ] Apply URL encoding to POST Location header.
+- [ ] Resolve POST Location header correctness with different upload storage.
+- [ ] Confirm percent decoding exactly once with Dev 2.
+- [ ] Confirm encoded slash handling.
+- [ ] Handle encoded trailing-slash redirection.
+- [ ] Prevent HTTP header injection.
+- [ ] Confirm query string preservation.
+
+Security and filesystem
+- [ ] Final review of symbolic link handling.
+- [ ] Review hard link limitations.
+- [ ] Review filesystem race conditions (TOCTOU).
+- [ ] Review intermediate directory permission limitations.
+- [ ] Review filesystem filename and path length limits.
+- [ ] Review large autoindex memory consumption.
+- [ ] Review request body copying and memory consumption.
+- [ ] Implement FD close-on-exec policy before CGI.
+- [ ] Prevent unintended CGI source serving through static locations.
+
+Minor corrections and improvements
+- [ ] Move autoindex ELOOP error mapping from 404 to 403.
+- [ ] Review ENAMETOOLONG error mapping.
+- [ ] Add fd = -1 after failed-write cleanup.
+- [ ] Replace numeric filesystem validation modes with an enum (optional).
+- [ ] Centralize duplicated filesystem errno mapping (optional).
+- [ ] Improve default error page messages.
+- [ ] Design custom error pages.
+- [ ] Improve autoindex HTML and CSS.
+- [ ] Expand MIME types if needed.
+- [ ] Clean unnecessary comments and debug output.
+
+Integration with Dev 1 and Dev 2
+- [ ] Confirm response FD initialization and ownership.
+- [ ] Confirm FD cleanup on client disconnection.
+- [ ] Confirm local IP and port selection.
+- [ ] Confirm maximum request body size enforcement.
+- [ ] Confirm maximum URI length enforcement.
+- [ ] Confirm Content-Length and Transfer-Encoding validation.
+- [ ] Confirm chunked request decoding.
+- [ ] Confirm no Content-Length header for 204 responses.
+- [ ] Confirm no response body for HEAD requests.
+- [ ] Confirm large-file Content-Length conversion.
+- [ ] Confirm handling of files changing size during transmission.
+- [ ] Confirm response header serialization and validation.
+- [ ] Confirm CGI integration with the single poll loop.
+
+Final testing
+- [ ] Complete CGI implementation.
+- [ ] Test all CGI edge cases.
+- [ ] Retest all GET edge cases.
+- [ ] Retest all POST edge cases.
+- [ ] Retest all DELETE edge cases.
+- [ ] Test URL encoding and decoding.
+- [ ] Test HTML injection protection.
+- [ ] Test multiple servers and ports.
+- [ ] Test multiple simultaneous clients.
+- [ ] Test client disconnections.
+- [ ] Test slow clients and timeouts.
+- [ ] Test keep-alive connections.
+- [ ] Test large files and request bodies.
+- [ ] Test binary file integrity.
+- [ ] Test FD exhaustion.
+- [ ] Test memory leaks.
+- [ ] Test FD leaks.
+- [ ] Test zombie process leaks after CGI.
+- [ ] Perform stress testing.
+- [ ] Perform browser compatibility testing.
+- [ ] Perform final subject compliance review.
+- [ ] Perform final evaluation simulation.

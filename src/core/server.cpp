@@ -1,22 +1,15 @@
+#include "../../inc/main.hpp"
 #include "../../inc/core/server.hpp"
-#include <cerrno>
-#include <exception>
-#include <fcntl.h>
-#include <poll.h>
-#include <sys/poll.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <vector>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <map>
-#include <utility>
-#include "../../inc/cgi_io/Execution.hpp"
+#include "../../inc/Execution/Execution.hpp"
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
-void ft_log_request(const HttpRequest& req)
+
+
+// ----------------------------------------------------------
+// ----------------------------------------------------------
+
+static void ft_log_request(const HttpRequest& req)
 {
     ft_log("\n========================================");
     ft_log("          PARSED HTTP REQUEST");
@@ -56,7 +49,7 @@ void ft_log_request(const HttpRequest& req)
 
     ft_log("========================================\n");
 }
-void ft_log_response(const HttpResponse& rsp)
+static void ft_log_response(const HttpResponse& rsp)
 {
     ft_log("\n========================================");
     ft_log("          HTTP RESPONSE");
@@ -89,6 +82,11 @@ void ft_log_response(const HttpResponse& rsp)
 
     ft_log("========================================\n");
 }
+
+// ----------------------------------------------------------
+// ----------------------------------------------------------
+
+
 
 
 int set_non_blocking(int fd){
@@ -234,6 +232,8 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
   return listenFd;
 }
 
+
+
 int connection_handler(Config &cfg){
 
   std::map<int, Client> clients;
@@ -245,7 +245,9 @@ int connection_handler(Config &cfg){
   for(size_t i = 0; i < servers.size(); i++){
     add_listener(pollfds, serverfds, servers[i]);
   }
-  
+
+  // ft_log("Prototype listening on http://localhost:"<< client.port);
+
   while(true){
     // std::cout << "hi\n";
     if(pollfds.empty()){
@@ -503,11 +505,11 @@ int connection_handler(Config &cfg){
    return 0;  
 }
 
+
 int main(int ac, char **av){
 
   std::string configFile;
   configFile = (ac != 2) ? "default.conf" : av[1];
-
 
   try{
     Config cfg(configFile);
@@ -517,5 +519,4 @@ int main(int ac, char **av){
     std::cerr << e.what();
     return 1;
   }
-
 }

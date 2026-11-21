@@ -1,10 +1,6 @@
 #pragma once
 
-#include <string>
-#include <iostream>
-#include <map>
-#include <sstream>
-#include <unistd.h>
+#include "../main.hpp"
 
 struct HttpResponse
 {
@@ -14,6 +10,7 @@ struct HttpResponse
 
 	int									body_fd;
 	size_t								body_size;
+
 	std::string           responc; // response buffer merging headers and body
 };
 

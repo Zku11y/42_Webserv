@@ -1,14 +1,6 @@
+#include "../../inc/main.hpp"
 #include "../../inc/http/configParser.hpp"
 #include "../../inc/http/config.hpp"
-
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <stdexcept>
-#include <cctype>
-#include <cstdlib>
-#include <limits>
-#include <set>
 
 ConfigParser::ConfigParser(const std::string& filename)
 	: _filename(filename), _pos(0){

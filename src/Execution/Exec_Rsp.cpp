@@ -1,5 +1,4 @@
-#include "../../inc/core/server.hpp"
-#include "../../inc/cgi_io/Execution.hpp"
+#include "../../inc/Execution/Execution.hpp"
 
 /* **********************************************/
 /*                                              */
@@ -10,8 +9,7 @@
 Execution::Execution(Client& client):
         status(0),
         req(client.parsed_req),
-        cgi_exc(false),
-        cgi_path("")
+        cgi_exc(false)
 {    
 
     if(client.rsp.body_fd!=-1)
@@ -383,9 +381,9 @@ void Execution::ft_handle_G_autoindex(Client& client)
     DIR *t=opendir(full_path.c_str());
     if(!t)
     {
-        if (errno == ENOENT || errno == ENOTDIR || errno == ELOOP)
+        if (errno == ENOENT || errno == ENOTDIR )
             status = 404;
-        else if (errno == EACCES || errno == EPERM)
+        else if (errno == EACCES || errno == EPERM || errno == ELOOP)
             status = 403;
         else
             status = 500;
@@ -507,7 +505,13 @@ void Execution::ft_handle_G_dir(Client& client, int& fd)
                 {
                     close(fd); fd = -1;
                     close(fd_2); fd_2 = -1;
-                    // ft_handle_cgi()
+
+                    cgi_req_path=req.path;
+                    if(cgi_req_path[cgi_req_path.size()-1]!='/')
+                        cgi_req_path+="/";
+                    cgi_req_path+= s_location._index;
+
+                    ft_handle_cgi(client);
                     return;
                 }
                 else
@@ -553,7 +557,9 @@ void Execution::ft_handle_Get(Client& client)
         if(cgi_exc)
         {
             close(fd); fd = -1;
-            // ft_handle_cgi(client, info);
+            cgi_req_path=req.path;
+            ft_handle_cgi(client);
+            return;
         }
         else
         {
@@ -599,7 +605,8 @@ void Execution::ft_handle_Post(Client& client)
             return;
         }
         close(fd); fd=-1;
-        ft_handle_cgi();
+        cgi_req_path=req.path;
+        ft_handle_cgi(client);
         return;
     }
 
@@ -792,7 +799,7 @@ void Execution::ft_error_2(Client& client)
     std::stringstream ss;
     ss << "<html><body><h1>"
        << client.rsp.status_code
-       << "Error" // change it later to custome msg
+       << " Error XD" // change it later to custome msg
        << "</h1></body></html>";
 
     if(client.rsp.body_fd!=-1)
@@ -890,23 +897,6 @@ void Execution::ft_handle_Redirect(Client& client)
     return;
 }
 
-
-
-/* **********************************************/
-/*                                              */
-/*                  Cgi part :                  */
-/*                                              */
-/* **********************************************/
-
-void Execution::ft_handle_cgi()
-{
-
-
-    
-    return;
-}
-
-
 /* **********************************************/
 /*                                              */
 /*                  helpers :                   */
@@ -994,3 +984,6 @@ std::string Execution::ft_mime_types()
 
     return "application/octet-stream";
 }
+
+
+

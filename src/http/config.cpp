@@ -1,12 +1,6 @@
+#include "../../inc/main.hpp"
 #include "../../inc/http/config.hpp"
 #include "../../inc/http/configParser.hpp"
-
-#include <fstream>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-#include <set>
-
 
 LocationConfig::LocationConfig() : _autoindex(false), _uploadEnable(false), _returnCode(0){}
 LocationConfig::~LocationConfig(){}

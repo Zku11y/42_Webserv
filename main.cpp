@@ -1,209 +1,209 @@
-// #include <iostream>
-// #include <map>
-// #include <vector>
-// #include "inc/http/config.hpp"
-
-// void	printLocation(const LocationConfig& location)
-// {
-// 	const std::vector<std::string>& methods = location.getMethods();
-// 	const std::map<std::string, std::string>& cgi = location.getCGI();
-// 	size_t i;
-
-// 	std::cout << "\tlocation " << location.getPath() << " {" << std::endl;
-
-// 	std::cout << "\t\tmethods";
-// 	i = 0;
-// 	while (i < methods.size())
-// 	{
-// 		std::cout << " " << methods[i];
-// 		i++;
-// 	}
-// 	std::cout << ";" << std::endl;
-
-// 	if (!location.getRoot().empty())
-// 		std::cout << "\t\troot " << location.getRoot() << ";" << std::endl;
-
-// 	if (!location.getIndex().empty())
-// 		std::cout << "\t\tindex " << location.getIndex() << ";" << std::endl;
-
-// 	std::cout << "\t\tautoindex "
-// 		<< (location.getAutoindex() ? "on" : "off")
-// 		<< ";" << std::endl;
-
-// 	std::cout << "\t\tupload_enable "
-// 		<< (location.getUploadEnable() ? "on" : "off")
-// 		<< ";" << std::endl;
-
-// 	if (!location.getUploadStore().empty())
-// 		std::cout << "\t\tupload_store "
-// 			<< location.getUploadStore() << ";" << std::endl;
-
-// 	if (location.getReturnCode() != 0)
-// 	{
-// 		std::cout << "\t\treturn "
-// 			<< location.getReturnCode() << " "
-// 			<< location.getReturnTarget()
-// 			<< ";" << std::endl;
-// 	}
-
-// 	std::map<std::string, std::string>::const_iterator it;
-// 	it = cgi.begin();
-// 	while (it != cgi.end())
-// 	{
-// 		std::cout << "\t\tcgi_ext "
-// 			<< it->first << " "
-// 			<< it->second << ";"
-// 			<< std::endl;
-// 		++it;
-// 	}
-
-// 	std::cout << "\t}" << std::endl;
-// }
-
-// void	printConfig(const Config& config)
-// {
-// 	const std::vector<ServerConfig>& servers = config.getServers();
-// 	size_t i;
-
-// 	i = 0;
-// 	while (i < servers.size())
-// 	{
-// 		const ServerConfig& server = servers[i];
-
-// 		std::cout << "server {" << std::endl;
-
-// 		std::cout << "\tlisten "
-// 			<< server.getPort() << ";" << std::endl;
-
-// 		std::cout << "\thost "
-// 			<< server.getHost() << ";" << std::endl;
-
-// 		if (!server.getServerName().empty())
-// 			std::cout << "\tserver_name "
-// 				<< server.getServerName() << ";" << std::endl;
-
-// 		std::cout << "\tclient_max_body_size "
-// 			<< server.getClientMaxBodySize()
-// 			<< " bytes;" << std::endl;
-
-// 		const std::map<int, std::string>& errors =
-// 			server.getErrorPages();
-
-// 		std::map<int, std::string>::const_iterator error;
-// 		error = errors.begin();
-// 		while (error != errors.end())
-// 		{
-// 			std::cout << "\terror_page "
-// 				<< error->first << " "
-// 				<< error->second << ";"
-// 				<< std::endl;
-// 			++error;
-// 		}
-
-// 		const std::vector<LocationConfig>& locations =
-// 			server.getLocations();
-
-// 		size_t j = 0;
-// 		while (j < locations.size())
-// 		{
-// 			std::cout << std::endl;
-// 			printLocation(locations[j]);
-// 			j++;
-// 		}
-
-// 		std::cout << "}" << std::endl;
-
-// 		if (i + 1 < servers.size())
-// 			std::cout << std::endl;
-
-// 		i++;
-// 	}
-// }
-
-// int main(int ac, char **av)
-// {
-// 	if (ac != 2)
-// 	{
-// 		std::cerr << "Usage: " << av[0] << " <config_file>" << std::endl;
-// 		return 1;
-// 	}
-// 	try
-// 	{
-// 		Config config(av[1]);
-// 		std::cout << "CONFIG VALID" << std::endl;
-// 		// printConfig(config);
-// 	}
-// 	catch (const std::exception& e)
-// 	{
-// 		std::cerr << "CONFIG ERROR: " << e.what() << std::endl;
-// 		return 1;
-// 	}
-// 	return 0;
-// }
-
-#include "inc/http/http.hpp"
 #include <iostream>
-#include <string>
+#include <map>
+#include <vector>
+#include "inc/http/config.hpp"
 
-static void	test_request(const std::string& target)
+void	printLocation(const LocationConfig& location)
 {
-	HttpParser			parser(1024 * 1024);
-	std::string			buffer;
-	const HttpRequest	*request;
+	const std::vector<std::string>& methods = location.getMethods();
+	const std::map<std::string, std::string>& cgi = location.getCGI();
+	size_t i;
 
-	buffer = "GET " + target + " HTTP/1.1\r\n";
-	buffer += "Host: localhost\r\n";
-	buffer += "\r\n";
+	std::cout << "\tlocation " << location.getPath() << " {" << std::endl;
 
-	std::cout << "========================================\n";
-	std::cout << "INPUT: " << target << "\n";
-
-	parser.parse(buffer);
-
-	if (parser.get_state() == HttpParser::ERROR)
+	std::cout << "\t\tmethods";
+	i = 0;
+	while (i < methods.size())
 	{
-		std::cout << "RESULT: ERROR\n";
-		return;
+		std::cout << " " << methods[i];
+		i++;
+	}
+	std::cout << ";" << std::endl;
+
+	if (!location.getRoot().empty())
+		std::cout << "\t\troot " << location.getRoot() << ";" << std::endl;
+
+	if (!location.getIndex().empty())
+		std::cout << "\t\tindex " << location.getIndex() << ";" << std::endl;
+
+	std::cout << "\t\tautoindex "
+		<< (location.getAutoindex() ? "on" : "off")
+		<< ";" << std::endl;
+
+	std::cout << "\t\tupload_enable "
+		<< (location.getUploadEnable() ? "on" : "off")
+		<< ";" << std::endl;
+
+	if (!location.getUploadStore().empty())
+		std::cout << "\t\tupload_store "
+			<< location.getUploadStore() << ";" << std::endl;
+
+	if (location.getReturnCode() != 0)
+	{
+		std::cout << "\t\treturn "
+			<< location.getReturnCode() << " "
+			<< location.getReturnTarget()
+			<< ";" << std::endl;
 	}
 
-	request = &parser.get_request();
+	std::map<std::string, std::string>::const_iterator it;
+	it = cgi.begin();
+	while (it != cgi.end())
+	{
+		std::cout << "\t\tcgi_ext "
+			<< it->first << " "
+			<< it->second << ";"
+			<< std::endl;
+		++it;
+	}
 
-	std::cout << "RESULT:      OK\n";
-	std::cout << "target:      [" << request->target << "]\n";
-	std::cout << "OG_path:     [" << request->OG_path << "]\n";
-	std::cout << "path:        [" << request->path << "]\n";
-	std::cout << "queryString: [" << request->queryString << "]\n";
+	std::cout << "\t}" << std::endl;
 }
 
-int	main()
+void	printConfig(const Config& config)
 {
-	std::cout << "\n--- VALID PATHS ---\n";
+	const std::vector<ServerConfig>& servers = config.getServers();
+	size_t i;
 
-	test_request("/hello");
-	test_request("/hello%20world");
-	test_request("/file%2Etxt");
-	test_request("/file%2etxt");
-	test_request("/%41%42%43");
-	test_request("/hello%20world?name=test");
+	i = 0;
+	while (i < servers.size())
+	{
+		const ServerConfig& server = servers[i];
 
-	std::cout << "\n--- INVALID / DANGEROUS PATHS ---\n";
+		std::cout << "server {" << std::endl;
 
-	test_request("/../secret");
-	test_request("/%2E%2E/secret");
-	test_request("/uploads/%2e%2e/secret");
-	test_request("/./index.html");
-	test_request("/%2E/index.html");
+		std::cout << "\tlisten "
+			<< server.getPort() << ";" << std::endl;
 
-	std::cout << "\n--- INVALID ENCODING ---\n";
+		std::cout << "\thost "
+			<< server.getHost() << ";" << std::endl;
 
-	test_request("/test%00file");
-	test_request("/test%0Afile");
-	test_request("/test%0Dfile");
-	test_request("/test%09file");
-	test_request("/test%7Ffile");
-	test_request("/test%GG");
-	test_request("/test%2");
-	test_request("/test%");
+		// if (!server.getServerName().empty())
+		// 	std::cout << "\tserver_name "
+		// 		<< server.getServerName() << ";" << std::endl;
 
+		std::cout << "\tclient_max_body_size "
+			<< server.getClientMaxBodySize()
+			<< " bytes;" << std::endl;
+
+		const std::map<int, std::string>& errors =
+			server.getErrorPages();
+
+		std::map<int, std::string>::const_iterator error;
+		error = errors.begin();
+		while (error != errors.end())
+		{
+			std::cout << "\terror_page "
+				<< error->first << " "
+				<< error->second << ";"
+				<< std::endl;
+			++error;
+		}
+
+		const std::vector<LocationConfig>& locations =
+			server.getLocations();
+
+		size_t j = 0;
+		while (j < locations.size())
+		{
+			std::cout << std::endl;
+			printLocation(locations[j]);
+			j++;
+		}
+
+		std::cout << "}" << std::endl;
+
+		if (i + 1 < servers.size())
+			std::cout << std::endl;
+
+		i++;
+	}
+}
+
+int main(int ac, char **av)
+{
+	if (ac != 2)
+	{
+		std::cerr << "Usage: " << av[0] << " <config_file>" << std::endl;
+		return 1;
+	}
+	try
+	{
+		Config config(av[1]);
+		std::cout << "CONFIG VALID" << std::endl;
+		// printConfig(config);
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "CONFIG ERROR: " << e.what() << std::endl;
+		return 1;
+	}
 	return 0;
 }
+
+// #include "inc/http/http.hpp"
+// #include <iostream>
+// #include <string>
+
+// static void	test_request(const std::string& target)
+// {
+// 	HttpParser			parser(1024 * 1024);
+// 	std::string			buffer;
+// 	const HttpRequest	*request;
+
+// 	buffer = "GET " + target + " HTTP/1.1\r\n";
+// 	buffer += "Host: localhost\r\n";
+// 	buffer += "\r\n";
+
+// 	std::cout << "========================================\n";
+// 	std::cout << "INPUT: " << target << "\n";
+
+// 	parser.parse(buffer);
+
+// 	if (parser.get_state() == HttpParser::ERROR)
+// 	{
+// 		std::cout << "RESULT: ERROR\n";
+// 		return;
+// 	}
+
+// 	request = &parser.get_request();
+
+// 	std::cout << "RESULT:      OK\n";
+// 	std::cout << "target:      [" << request->target << "]\n";
+// 	std::cout << "OG_path:     [" << request->OG_path << "]\n";
+// 	std::cout << "path:        [" << request->path << "]\n";
+// 	std::cout << "queryString: [" << request->queryString << "]\n";
+// }
+
+// int	main()
+// {
+// 	std::cout << "\n--- VALID PATHS ---\n";
+
+// 	test_request("/hello");
+// 	test_request("/hello%20world");
+// 	test_request("/file%2Etxt");
+// 	test_request("/file%2etxt");
+// 	test_request("/%41%42%43");
+// 	test_request("/hello%20world?name=test");
+
+// 	std::cout << "\n--- INVALID / DANGEROUS PATHS ---\n";
+
+// 	test_request("/../secret");
+// 	test_request("/%2E%2E/secret");
+// 	test_request("/uploads/%2e%2e/secret");
+// 	test_request("/./index.html");
+// 	test_request("/%2E/index.html");
+
+// 	std::cout << "\n--- INVALID ENCODING ---\n";
+
+// 	test_request("/test%00file");
+// 	test_request("/test%0Afile");
+// 	test_request("/test%0Dfile");
+// 	test_request("/test%09file");
+// 	test_request("/test%7Ffile");
+// 	test_request("/test%GG");
+// 	test_request("/test%2");
+// 	test_request("/test%");
+
+// 	return 0;
+// }

@@ -326,8 +326,8 @@ bool	HttpParser::valid_decoded_path(const std::string& path) const{
 		if (end == std::string::npos)
 			end = path.size();
 		part = path.substr(start, end - start);
-		if (part == "." || part == "..")
-			return false;
+		// if (part == "." || part == "..")
+		// 	return false;
 		start = end + 1;
 	}
 	return true;
@@ -346,7 +346,7 @@ std::string	HttpParser::decode_path(const std::string& path) const{
 				return "";
 			high = hex_value(path[a + 1]);
 			low = hex_value(path[a + 2]);
-			if (high == -1 && low == -1)
+			if (high == -1 || low == -1)
 				return "";
 			result += static_cast<char>(high * 16 + low);
 			a += 3;

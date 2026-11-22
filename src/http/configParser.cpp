@@ -28,7 +28,7 @@ ConfigParser::ConfigParser(const std::string& filename)
 
 	_serverHandlers["listen"] = &ConfigParser::parseListen;
 	_serverHandlers["host"] = &ConfigParser::parseHost;
-	_serverHandlers["server_name"] = &ConfigParser::parseServerName;
+	// _serverHandlers["server_name"] = &ConfigParser::parseServerName;
 	_serverHandlers["client_max_body_size"] = &ConfigParser::parseClientMaxBodySize;
 	_serverHandlers["error_page"] = &ConfigParser::parseErrorPage;
 }
@@ -168,23 +168,67 @@ void	ConfigParser::parseListen(ServerConfig& server){
 	expect(";");
 }
 
+uint32_t	convert_ip(const std::string& ip){
+	unsigned int	parts[4] = {0};
+	int				part = 0;
+	int				digits = 0;
+
+	for (size_t i = 0; i < ip.size(); i++)
+	{
+		if (ip[i] == '.')
+		{
+			if (digits == 0 || part >= 3)
+				return static_cast<uint32_t>(-1);
+			part++;
+			digits = 0;
+		}
+		else if (ip[i] >= '0' && ip[i] <= '9')
+		{
+			if (++digits > 3)
+				return static_cast<uint32_t>(-1);
+			parts[part] = parts[part] * 10 + (ip[i] - '0');
+			if (parts[part] > 255)
+				return static_cast<uint32_t>(-1);
+		}
+		else
+			return static_cast<uint32_t>(-1);
+	}
+
+	if (part != 3 || digits == 0)
+		return static_cast<uint32_t>(-1);
+
+	// if (parts[0] != 127)
+	// 	return static_cast<uint32_t>(-1);
+
+	return (parts[0] << 24) |
+			(parts[1] << 16) |
+			(parts[2] << 8) |
+			parts[3];
+}
+
 void	ConfigParser::parseHost(ServerConfig& server){
+	uint32_t	ip;
+
 	expect("host");
 	if (!hasMoreTokens() || currentToken() == ";")
 		throw std::runtime_error("Expected host");
+	ip = convert_ip(currentToken());
+	if (ip == static_cast<uint32_t>(-1))
+		throw std::runtime_error("Invalid host IP");
 	server.setHost(currentToken());
+	server.setIp(ip);
 	advance();
 	expect(";");
 }
 
-void	ConfigParser::parseServerName(ServerConfig& server){
-	expect("server_name");
-	if (!hasMoreTokens() || currentToken() == ";")
-		throw std::runtime_error("Expected server name");
-	server.setServerName(currentToken());
-	advance();
-	expect(";");
-}
+// void	ConfigParser::parseServerName(ServerConfig& server){
+// 	expect("server_name");
+// 	if (!hasMoreTokens() || currentToken() == ";")
+// 		throw std::runtime_error("Expected server name");
+// 	server.setServerName(currentToken());
+// 	advance();
+// 	expect(";");
+// }
 
 size_t	ConfigParser::parseSize(const std::string& value){
 	size_t				multiplayer;
@@ -311,6 +355,8 @@ void	ConfigParser::tokenize(){
 			}
 			_tokens.push_back(std::string(1, _content[a]));
 		}
+		else if (_content[a] == '\"' || _content[a] == '\'' || _content[a] == '\\')
+			throw std::runtime_error("Quoted values and escapes are not supported");
 		else
 			token += _content[a];
 		a++;

@@ -66,9 +66,9 @@ class HttpParser
 		///// request-line helpers
 		bool		valid_method(const std::string& method) const;
 		bool		valid_target(const std::string& target) const;
+		std::string	decode_path(const std::string&	path) const;
 		int			hex_value(char c) const;
 		bool		valid_decoded_path(const std::string& path) const;
-		std::string	decode_path(const std::string&	path) const;
 
 		///// headers helpers
 		std::string	trim_ows(const std::string& str) const;

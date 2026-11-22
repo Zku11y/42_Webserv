@@ -61,3 +61,5 @@ class ConfigParser
 
 		void	parse(Config& config);
 };
+
+uint32_t	convert_ip(const std::string& ip);

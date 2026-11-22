@@ -1,6 +1,7 @@
 #include "../../inc/main.hpp"
 #include "../../inc/core/server.hpp"
 #include "../../inc/Execution/Execution.hpp"
+#include <sys/poll.h>
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
@@ -8,6 +9,8 @@
 
 // ----------------------------------------------------------
 // ----------------------------------------------------------
+
+// hi
 
 static void ft_log_request(const HttpRequest& req)
 {
@@ -233,10 +236,60 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
 }
 
 
+bool sk_setup_fd(int fd){
+  set_non_blocking(fd);
+  if(fcntl(fd, F_SETFD, FD_CLOEXEC) > 0)
+    return 1;
+  return 0;
+}
+
+void sk_add_pipe(CgiPipeMap &pipe_map, std::vector<pollfd> &pollfds, int pipe_fd, pipe_type type, int event, Client &client){
+  CgiPipe pipe = {
+    pipe_fd,
+    type,
+    client
+  };
+
+  pollfd pfd;
+  pfd.events = event;
+  pfd.fd = pipe_fd;
+  pfd.revents = 0;
+
+  pipe_map.insert(std::make_pair(pipe_fd, pipe));
+  pollfds.push_back(pfd);
+}
+
+//void sk_close_pipe();
+
+bool sk_add_pipes(CgiPipeMap &pipe_map, std::vector<pollfd> &pollfds, Client &client){
+    if(!sk_setup_fd(client.cgi_rsp.stdout_read_fd) || !sk_setup_fd(client.cgi_rsp.stdin_write_fd))
+      return false;
+
+    sk_add_pipe(pipe_map, pollfds, client.cgi_rsp.stdout_read_fd, P_STDOUT, POLLIN, client);
+    if(client.parsed_req.body.empty()){
+      close(client.cgi_rsp.stdin_write_fd);
+      client.cgi_rsp.stdin_write_fd = -1;
+    }
+        
+    sk_add_pipe(pipe_map, pollfds, client.cgi_rsp.stdin_write_fd, P_STDIN, POLLOUT, client);
+    return true;
+}
+
+bool sk_handle_pipes(CgiPipe pipe, pollfd &pfd){
+  if(pipe.p_type == P_STDIN){
+    
+    if(!(pfd.revents & (POLLERR | POLLHUP))){
+       if(!(pfd.revents & POLLOUT))
+         return false;
+    }
+    
+  }
+}
 
 int connection_handler(Config &cfg){
 
   std::map<int, Client> clients;
+  std::map<int, CgiPipe> pipes;
   std::vector<pollfd> pollfds;
   std::vector<server_info> serverfds;
 
@@ -291,8 +344,14 @@ int connection_handler(Config &cfg){
         break;
       }
 
+      if(type == SERVER)
+        continue;
 
-      if(type == SERVER || clients.empty()) continue; // if not server, its client, but if client isn't added yet then unused fd in pollfds
+      std::map<int, CgiPipe>::iterator f = pipes.find(pollfds[i].fd);
+      if(f == pipes.end())
+        continue;
+
+      if(type != CLIENT || clients.empty()) continue; // if not server, its client, but if client isn't added yet then unused fd in pollfds
 
       // ft_log("Hi im a new client! :DDDD");
       std::map<int, Client>::iterator found = clients.find(pollfds[i].fd);
@@ -351,20 +410,6 @@ int connection_handler(Config &cfg){
           continue;
         }
 
-        // if(crnt_client.parser.has_error()){
-        //   crnt_client.r_bytes = 0;
-        //   crnt_client.status = WRITE;
-        //   pollfds[i].events = POLLOUT;
-        //   crnt_client.t_out = get_time();
-        //   crnt_client.parsed_req = crnt_client.parser.get_request();
-        //   crnt_client.parsed_req.localHost = crnt_client.localHost;
-        //   crnt_client.parsed_req.localPort = crnt_client.localPort;
-        //   Execution exec_client(crnt_client);
-        //   exec_client.ft_handle_error_2(crnt_client, crnt_client.parser.get_error_code());
-        //   HttpResponseBuilder builder;
-        //   builder.build(crnt_client.rsp);
-        // }
-
         if (crnt_client.parser.has_error()) {
             ft_log("its a fucking errorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr");
     
@@ -388,20 +433,35 @@ int connection_handler(Config &cfg){
         }
 
         else if(crnt_client.parser.is_complete()){
+        
+          crnt_client.parsed_req = crnt_client.parser.get_request();
+          crnt_client.parsed_req.localHost = crnt_client.localHost; 
+          crnt_client.parsed_req.localPort = crnt_client.localPort; 
+          ft_log_request(crnt_client.parsed_req);
+          Execution exec_client(crnt_client);
+          exec_client.ft_handle_resource(crnt_client, cfg);
+          
+          if(crnt_client.status == WAIT){
+            pollfds[i].events = 0; // pause the client's events until cgi finishes
+
+            if(!sk_add_pipes(pipes, pollfds, crnt_client)){
+              close(pollfds[i].fd);
+              pollfds.erase(pollfds.begin() + i);
+              clients.erase(found);
+            }
+
+            continue;
+          }
           
           crnt_client.r_bytes = 0;
           crnt_client.status = WRITE; 
           pollfds[i].events = POLLOUT;
           crnt_client.t_out = get_time();
-          crnt_client.parsed_req = crnt_client.parser.get_request();
-          crnt_client.parsed_req.localHost = crnt_client.localHost; 
-          crnt_client.parsed_req.localPort = crnt_client.localPort; 
-         ft_log_request(crnt_client.parsed_req);
-          Execution exec_client(crnt_client);
-          exec_client.ft_handle_resource(crnt_client, cfg);
-         ft_log_response(crnt_client.rsp);
+          ft_log_response(crnt_client.rsp);
+
           HttpResponseBuilder builder;
           builder.build(crnt_client.rsp);
+
         }
 
         // [ ... ] call the parse and CGI functions, must communicate when client is removed

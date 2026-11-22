@@ -93,4 +93,17 @@ typedef struct client_info{
   
 } Client;
 
+enum pipe_type{
+  P_STDIN,
+  P_STDOUT
+};
+
+struct CgiPipe{
+  int pipe_fd;
+  pipe_type p_type;
+  Client &client;  
+};
+
+typedef std::map<int, CgiPipe> CgiPipeMap;
+
 #endif

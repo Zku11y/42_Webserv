@@ -1,6 +1,9 @@
 #include "../../inc/main.hpp"
 #include "../../inc/core/server.hpp"
 #include "../../inc/Execution/Execution.hpp"
+#include <cerrno>
+#include <cstdlib>
+#include <fcntl.h>
 #include <sys/poll.h>
 
 // TODO: any push back and other functions that allocate need to be checked so that they
@@ -90,7 +93,14 @@ static void ft_log_response(const HttpResponse& rsp)
 // ----------------------------------------------------------
 
 
-
+void sk_remove_pollfd(std::vector<pollfd> &pollfds, int fd){
+  for(size_t i = 0; i < pollfds.size(); ++i){
+    if(pollfds[i].fd == fd){
+      pollfds.erase(pollfds.begin() + i);
+      return;
+    }
+  }
+}
 
 int set_non_blocking(int fd){
   if(fcntl(fd, F_SETFL, O_NONBLOCK) < 0)      
@@ -114,7 +124,7 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client
     return ;
   }
   
-  if(!set_non_blocking(new_fd)){
+  if(!set_non_blocking(new_fd) || fcntl(new_fd, F_SETFD, FD_CLOEXEC < 0)){
     std::cerr << "Error: Couldn't set client fd to non blocking\n";
     close(new_fd);
     return ;
@@ -209,7 +219,7 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
   if(setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     return(std::cerr << "Error: setsockopt failed\n", close(listenFd), -1);
 
-  if(!set_non_blocking(listenFd))
+  if(!set_non_blocking(listenFd) || fcntl(listenFd, F_SETFD, FD_CLOEXEC) < 0)
     return (close(listenFd), -1);
 
   if(bind(listenFd, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) < 0)
@@ -237,7 +247,7 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
 
 
 bool sk_setup_fd(int fd){
-  if(!set_non_blocking(fd) || fcntl(fd, F_SETFD, FD_CLOEXEC) >= 0)
+  if(set_non_blocking(fd) && fcntl(fd, F_SETFD, FD_CLOEXEC) >= 0)
     return 1;
   return 0;
 }
@@ -277,15 +287,25 @@ bool sk_add_pipes(CgiPipeMap &pipe_map, std::vector<pollfd> &pollfds, Client &cl
   return true;
 }
 
+void sk_close_pipe(int &fd, CgiPipeMap &pipes, std::vector<pollfd> &pollfds){
+  if(fd < 0) return;
+
+
+  pipes.erase(fd);
+  sk_remove_pollfd(pollfds, fd);
+  close(fd);
+  fd = -1;
+}
+
 bool sk_handle_pipes(CgiPipe pipe, CgiPipeMap &pipes, int i, std::vector<pollfd> &pollfds){
-  if(pollfds[i].revents == POLLNVAL)
+  if(pollfds[i].revents & POLLNVAL)
     return false;
 
   if(pipe.p_type == P_STDIN){
     
     if(!(pollfds[i].revents & (POLLERR | POLLHUP))){
        if(!(pollfds[i].revents & POLLOUT))
-         return false;
+         return true;
       
         std::string &body = pipe.client.parsed_req.body;
         size_t &offset = pipe.client.cgi_rsp.body_offset;
@@ -332,7 +352,8 @@ int connection_handler(Config &cfg){
   std::map<int, CgiPipe> pipes;
   std::vector<pollfd> pollfds;
   std::vector<server_info> serverfds;
-
+  std::vector<pid_t> retired_pids;
+  
   std::vector<ServerConfig> servers = cfg.getServers();
 
   for(size_t i = 0; i < servers.size(); i++){
@@ -355,6 +376,7 @@ int connection_handler(Config &cfg){
       break;
     }
     
+    std::set<int> clients_to_close;
     for(size_t i = pollfds.size(); i > 0;){
       i--;
       
@@ -387,10 +409,37 @@ int connection_handler(Config &cfg){
       if(type == SERVER)
         continue;
 
-      std::map<int, CgiPipe>::iterator f = pipes.find(pollfds[i].fd);
+      // std::map<int, CgiPipe>::iterator f = pipes.find(pollfds[i].fd);
+      // if(f != pipes.end()){
+      //   type = CGI;
+      //   if(!sk_handle_pipes(f->second, pipes, i, pollfds)){
+      //     close(f->second.client.cgi_rsp.stdin_write_fd);
+      //     close(f->second.client.cgi_rsp.stdout_read_fd);
+      //     close(f->second.client.fd);
+      //     pollfds.erase(pollfds.begin() + i);
+      //     int other_fd = f->second.p_type == P_STDIN ? f->second.client.cgi_rsp.stdout_read_fd : f->second.client.cgi_rsp.stdin_write_fd; 
+      //     std::vector<pollfd>::iterator it = std::find(pollfds.begin(), pollfds.end(), other_fd);
+      //     if(it != pollfds.end())
+      //       pollfds.erase(it);
+      //     pollfds.erase(pollfds.begin() + f->second.client_index);
+      //     std::map<int, Client>::iterator found = clients.find(pollfds[i].fd);
+      //     clients.erase(found);
+      //     continue;
+      //   }
+      // }
+
+
+      CgiPipeMap::iterator f = pipes.find(pollfds[i].fd);
       if(f != pipes.end()){
-        type = CGI;
-        sk_handle_pipes(f->second, pipes, i, pollfds);
+        int client_fd = f->second.client.fd;
+
+        if(clients_to_close.count(client_fd))
+          continue;
+
+        if(!sk_handle_pipes(f->second, pipes, i, pollfds))
+          clients_to_close.insert(client_fd);
+
+        continue;
       }
 
       if(type != CLIENT || clients.empty()) continue; // if not server, its client, but if client isn't added yet then unused fd in pollfds
@@ -404,13 +453,16 @@ int connection_handler(Config &cfg){
       }
           
       Client &crnt_client = found->second;
+      double timeout = crnt_client.status == WAIT ? CGI_T_OUT : T_OUT;
+
+      if(clients_to_close.count(crnt_client.fd))
+        continue;
+
       if(pollfds[i].revents & (POLLERR | POLLNVAL)
         || ((pollfds[i].revents & POLLHUP) && !(pollfds[i].revents & (POLLIN | POLLOUT)))
-        || (get_time() - crnt_client.t_out) > T_OUT){
+        || (get_time() - crnt_client.t_out) > timeout){
 
-        close(pollfds[i].fd);
-        pollfds.erase(pollfds.begin() + i);
-        clients.erase(found);
+        clients_to_close.insert(crnt_client.fd);
         continue;
       }
 
@@ -424,7 +476,7 @@ int connection_handler(Config &cfg){
           crnt_client.tr_bytes += res;
           crnt_client.t_out = get_time();
           crnt_client.request_buffer.append(buffer, res);
-          crnt_client.parser.parse(crnt_client.request_buffer);
+          // crnt_client.parser.parse(crnt_client.request_buffer);
         }
 
         // client closes its end of write, switch to POLLOUT and send response
@@ -446,17 +498,19 @@ int connection_handler(Config &cfg){
         // an error was flagged, but since we can't check errno we can't diff between
           // a server breaking error and a simple pause flag sent by the client, so we close the socket
         else if (res < 0){
-          close(pollfds[i].fd);
-          pollfds.erase(pollfds.begin() + i);
-          clients.erase(found);
+          clients_to_close.insert(crnt_client.fd);
           continue;
         }
-
+      }
+      
+      if(crnt_client.status == READ){
+        crnt_client.parser.parse(crnt_client.request_buffer);
+      
         if (crnt_client.parser.has_error()) {
             ft_log("its a fucking errorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr");
-    
+  
             const int error_code = crnt_client.parser.get_error_code();
-            
+          
 
             crnt_client.parsed_req = HttpRequest();
             ft_log_request(crnt_client.parsed_req);
@@ -475,26 +529,25 @@ int connection_handler(Config &cfg){
         }
 
         else if(crnt_client.parser.is_complete()){
-        
+      
           crnt_client.parsed_req = crnt_client.parser.get_request();
           crnt_client.parsed_req.localHost = crnt_client.localHost; 
           crnt_client.parsed_req.localPort = crnt_client.localPort; 
           ft_log_request(crnt_client.parsed_req);
+          crnt_client.cgi_rsp = CgiState();
           Execution exec_client(crnt_client);
           exec_client.ft_handle_resource(crnt_client, cfg);
-          
+        
           if(crnt_client.status == WAIT){
+            crnt_client.t_out = get_time();
             pollfds[i].events = 0; // pause the client's events until cgi finishes
 
-            if(!sk_add_pipes(pipes, pollfds, crnt_client)){
-              close(pollfds[i].fd);
-              pollfds.erase(pollfds.begin() + i);
-              clients.erase(found);
-            }
+            if(!sk_add_pipes(pipes, pollfds, crnt_client))
+              clients_to_close.insert(crnt_client.fd);
 
             continue;
           }
-          
+        
           crnt_client.r_bytes = 0;
           crnt_client.status = WRITE; 
           pollfds[i].events = POLLOUT;
@@ -506,12 +559,9 @@ int connection_handler(Config &cfg){
 
         }
 
-        // [ ... ] call the parse and CGI functions, must communicate when client is removed
+      }  // [ ... ] call the parse and CGI functions, must communicate when client is removed
           // get info on request finished to switch event to POLLOUT + status to WRITE and vise versa with the response 
 
-    
-
-      }
 
       if(pollfds[i].revents & POLLOUT){
  
@@ -545,10 +595,7 @@ int connection_handler(Config &cfg){
             }
 
             if(res < 0){
-              close(pollfds[i].fd);
-              close(crnt_client.rsp.body_fd);
-              clients.erase(found);
-              pollfds.erase(pollfds.begin() + i);
+              clients_to_close.insert(crnt_client.fd);
               continue;
             } 
           }
@@ -570,9 +617,7 @@ int connection_handler(Config &cfg){
           // if res == 0 : ignore and move on. if we keep getting 0 timeout will eventually stop it
 
           if(res < 0){
-            close(pollfds[i].fd);
-            clients.erase(found);
-            pollfds.erase(pollfds.begin() + i);
+            clients_to_close.insert(crnt_client.fd);
             continue;
           }
         }
@@ -589,9 +634,7 @@ int connection_handler(Config &cfg){
               crnt_client.response_buffer.clear();
               break;
             case WRITE_THEN_CLOSE:
-              close(pollfds[i].fd);
-              clients.erase(found);
-              pollfds.erase(pollfds.begin() + i);
+              clients_to_close.insert(crnt_client.fd);
               continue;
             default:
               break;
@@ -602,7 +645,86 @@ int connection_handler(Config &cfg){
       
     
     } // for()
-        
+
+    for (std::map<int, Client>::iterator it = clients.begin();
+         it != clients.end(); ++it)
+    {
+        Client &client = it->second;
+
+        if (client.status != WAIT
+            || clients_to_close.count(client.fd))
+            continue;
+
+        CgiState &cgi = client.cgi_rsp;
+
+        if (!cgi.child_reaped) {
+            int status = 0;
+            pid_t result = waitpid(cgi.pid, &status, WNOHANG);
+
+            if (result == 0)
+                continue;
+
+            if (result < 0) {
+                if (errno == EINTR)
+                    continue;
+
+                if (errno == ECHILD)
+                    cgi.pid = -1;
+
+                clients_to_close.insert(client.fd);
+                continue;
+            }
+
+            cgi.child_reaped = true;
+            cgi.child_exit_status = status;
+        }
+
+        if (!WIFEXITED(cgi.child_exit_status)
+            || WEXITSTATUS(cgi.child_exit_status) != 0)
+        {
+            clients_to_close.insert(client.fd);
+            continue;
+        }
+
+        if (!cgi.stdout_eof)
+            continue;
+
+        sk_close_pipe(cgi.stdin_write_fd, pipes, pollfds);
+    }
+  
+    for(std::set<int>::iterator it = clients_to_close.begin();
+      it != clients_to_close.end(); ++it){
+      std::map<int, Client>::iterator found = clients.find(*it);
+      if(found == clients.end())
+        continue;
+
+      Client &client = found->second;
+      sk_close_pipe(client.cgi_rsp.stdin_write_fd, pipes, pollfds);
+      sk_close_pipe(client.cgi_rsp.stdout_read_fd, pipes, pollfds);
+      if(client.rsp.body_fd >= 0){
+        close(client.rsp.body_fd);
+        client.rsp.body_fd = -1;       
+      }
+      if(client.cgi_rsp.pid > 0 && !client.cgi_rsp.child_reaped){
+        kill(client.cgi_rsp.pid, SIGKILL);
+        retired_pids.push_back(client.cgi_rsp.pid);
+      }
+
+      sk_remove_pollfd(pollfds, client.fd);
+      close(client.fd);
+
+      clients.erase(found);
+    }
+
+    for(size_t i = 0; i < retired_pids.size();){
+      pid_t result = waitpid(retired_pids[i], NULL, WNOHANG);
+
+      if(result == retired_pids[i] || (result < 0 && errno == ECHILD))
+        retired_pids.erase(retired_pids.begin() + i);
+      else
+        i++;
+    }
+    
   } // while()
    return 0;  
 }
@@ -612,6 +734,11 @@ int main(int ac, char **av){
 
   std::string configFile;
   configFile = (ac != 2) ? "default.conf" : av[1];
+
+  if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+      std::cerr << "Error: couldn't ignore SIGPIPE\n";
+      return 1;
+  }
 
   try{
     Config cfg(configFile);

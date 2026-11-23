@@ -4,6 +4,8 @@
 #include <set>
 #include <cstring>
 #include <cstdlib>
+#include <signal.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <poll.h>
 #include <fcntl.h>

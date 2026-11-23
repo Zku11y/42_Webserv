@@ -11,6 +11,7 @@
 #define SK_PORT 8080
 #define BACKLOG_MAX SOMAXCONN
 #define T_OUT 500
+#define CGI_T_OUT 5000
 #define W_BUFF_SIZE 24096
 #define R_BUFF_SIZE 24096
 
@@ -95,7 +96,8 @@ typedef struct client_info{
 
 enum pipe_type{
   P_STDIN,
-  P_STDOUT
+  P_STDOUT,
+  P_CLOSED
 };
 
 struct CgiPipe{

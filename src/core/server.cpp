@@ -237,8 +237,7 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
 
 
 bool sk_setup_fd(int fd){
-  set_non_blocking(fd);
-  if(fcntl(fd, F_SETFD, FD_CLOEXEC) > 0)
+  if(!set_non_blocking(fd) || fcntl(fd, F_SETFD, FD_CLOEXEC) >= 0)
     return 1;
   return 0;
 }
@@ -262,28 +261,69 @@ void sk_add_pipe(CgiPipeMap &pipe_map, std::vector<pollfd> &pollfds, int pipe_fd
 //void sk_close_pipe();
 
 bool sk_add_pipes(CgiPipeMap &pipe_map, std::vector<pollfd> &pollfds, Client &client){
-    if(!sk_setup_fd(client.cgi_rsp.stdout_read_fd) || !sk_setup_fd(client.cgi_rsp.stdin_write_fd))
-      return false;
+  if(!sk_setup_fd(client.cgi_rsp.stdout_read_fd) || !sk_setup_fd(client.cgi_rsp.stdin_write_fd))
+    return false;
 
-    sk_add_pipe(pipe_map, pollfds, client.cgi_rsp.stdout_read_fd, P_STDOUT, POLLIN, client);
-    if(client.parsed_req.body.empty()){
-      close(client.cgi_rsp.stdin_write_fd);
-      client.cgi_rsp.stdin_write_fd = -1;
-    }
-        
-    sk_add_pipe(pipe_map, pollfds, client.cgi_rsp.stdin_write_fd, P_STDIN, POLLOUT, client);
+  sk_add_pipe(pipe_map, pollfds, client.cgi_rsp.stdout_read_fd, P_STDOUT, POLLIN, client);
+
+  if(client.parsed_req.body.empty()){
+    close(client.cgi_rsp.stdin_write_fd);
+    client.cgi_rsp.stdin_write_fd = -1;
     return true;
+  }
+
+  sk_add_pipe(pipe_map, pollfds, client.cgi_rsp.stdin_write_fd, P_STDIN, POLLOUT, client);
+
+  return true;
 }
 
-bool sk_handle_pipes(CgiPipe pipe, pollfd &pfd){
+bool sk_handle_pipes(CgiPipe pipe, CgiPipeMap &pipes, int i, std::vector<pollfd> &pollfds){
+  if(pollfds[i].revents == POLLNVAL)
+    return false;
+
   if(pipe.p_type == P_STDIN){
     
-    if(!(pfd.revents & (POLLERR | POLLHUP))){
-       if(!(pfd.revents & POLLOUT))
+    if(!(pollfds[i].revents & (POLLERR | POLLHUP))){
+       if(!(pollfds[i].revents & POLLOUT))
          return false;
+      
+        std::string &body = pipe.client.parsed_req.body;
+        size_t &offset = pipe.client.cgi_rsp.body_offset;
+        size_t size = body.size() - offset;
+        ssize_t count = write(pollfds[i].fd, body.c_str() + offset, size < W_BUFF_SIZE ? size : W_BUFF_SIZE);
+
+        if(count < 0)
+          return false;
+
+        offset += count;
+        if(offset < body.size())
+          return true;       
     }
-    
+    pipe.client.cgi_rsp.stdin_write_fd = -1;
   }
+  else if(pipe.p_type == P_STDOUT){
+    if((pollfds[i].revents & (POLLERR)))
+      return false;
+    if(!(pollfds[i].revents & (POLLIN | POLLHUP)))
+      return true;
+
+    char buffer[R_BUFF_SIZE];
+    ssize_t r = read(pollfds[i].fd, buffer, R_BUFF_SIZE);
+
+    if(r < 0)
+      return false;
+    if(r > 0){
+      pipe.client.cgi_rsp.raw_output.append(buffer, r);
+      return true;
+    }
+    pipe.client.cgi_rsp.stdout_eof = true;
+    pipe.client.cgi_rsp.stdout_read_fd = -1;
+  }
+
+  close(pollfds[i].fd);
+  pipes.erase(pollfds[i].fd);
+  pollfds.erase(pollfds.begin() + i);
+  return true;
 }
 
 int connection_handler(Config &cfg){
@@ -348,8 +388,10 @@ int connection_handler(Config &cfg){
         continue;
 
       std::map<int, CgiPipe>::iterator f = pipes.find(pollfds[i].fd);
-      if(f == pipes.end())
-        continue;
+      if(f != pipes.end()){
+        type = CGI;
+        sk_handle_pipes(f->second, pipes, i, pollfds);
+      }
 
       if(type != CLIENT || clients.empty()) continue; // if not server, its client, but if client isn't added yet then unused fd in pollfds
 

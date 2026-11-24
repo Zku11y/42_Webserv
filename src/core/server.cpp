@@ -143,7 +143,7 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client
     return ;
   }
 
-  Client new_client = {};
+  Client new_client ;
   new_client.client_ip = bytes_to_string(client_addr); 
   new_client.fd = new_fd;
   new_client.r_bytes = 0;
@@ -755,9 +755,8 @@ int connection_handler(Config &cfg){
 }
 
 
-int main(int ac, char **av){
-
-  std::string configFile;
+int main(int ac, char **av)
+{
 
   if(ac != 2) return 1;
   
@@ -767,7 +766,7 @@ int main(int ac, char **av){
   }
 
   try{
-    Config cfg(configFile);
+    Config cfg(av[1]);
     ft_log("Starting in 3, 2, 1......");
     connection_handler(cfg);
 

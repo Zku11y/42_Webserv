@@ -14,7 +14,8 @@
 #define CGI_T_OUT 5000
 #define W_BUFF_SIZE 24096
 #define R_BUFF_SIZE 24096
-#define MAX_CGI_OUTPUT  20 * 1024 * 1024
+#define MAX_CGI_HEADERS (16 * 1024)
+#define MAX_CGI_OUTPUT  (20 * 1024 * 1024)
 
 enum states{
   READ,

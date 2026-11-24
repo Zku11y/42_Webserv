@@ -81,7 +81,7 @@ class Execution
         void ft_handle_cgi(Client& client);
         int ft_cgi_init();
         int ft_cgi_handle_path();
-        int ft_cgi_build_env();
+        int ft_cgi_build_env(Client& client);
         int ft_cgi_build_argv();
         int ft_cgi_build_pipes();
         void ft_cgi_child();

@@ -440,7 +440,7 @@ void Execution::ft_cgi_child()
 /*                                              */
 /* **********************************************/
 
-static void ft_handle_error_3(Client& client, int s)
+void ft_handle_error_3(Client& client, int s)
 {
     client.rsp.status_code=s;
     client.rsp.headers.clear();

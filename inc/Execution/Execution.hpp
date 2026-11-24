@@ -3,7 +3,6 @@
 #include "../main.hpp"
 #include "../core/server.hpp"
 
-#define MAX_CGI_OUTPUT  20 * 1024 * 1024
 class Execution
 {
     friend int connection_handler(Config &cfg);
@@ -102,3 +101,4 @@ std::string ft_to_string(T value)
 }
 
 void ft_cgi_finish(Client& client);
+void ft_handle_error_3(Client& client, int s);

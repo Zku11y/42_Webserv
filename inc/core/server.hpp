@@ -14,6 +14,7 @@
 #define CGI_T_OUT 5000
 #define W_BUFF_SIZE 24096
 #define R_BUFF_SIZE 24096
+#define MAX_CGI_OUTPUT  20 * 1024 * 1024
 
 enum states{
   READ,
@@ -88,6 +89,8 @@ typedef struct client_info{
     HttpResponse rsp;
 
   std::string response_buffer;
+
+  std::string client_ip;
 
 
   client_info() : parser(),cgi_rsp(){}

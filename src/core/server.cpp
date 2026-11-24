@@ -1,6 +1,7 @@
 #include "../../inc/main.hpp"
 #include "../../inc/core/server.hpp"
 #include "../../inc/Execution/Execution.hpp"
+#include <netinet/in.h>
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
@@ -110,9 +111,27 @@ double get_time(){
   return ((double)tv.tv_sec * 1000.0) + ((double)tv.tv_usec / 1000.0);
 }
 
+std::string bytes_to_string(const sockaddr_in &address)
+{
+    const unsigned char *octets =
+        reinterpret_cast<const unsigned char *>(&address.sin_addr.s_addr);
+
+    std::ostringstream ip;
+    ip << static_cast<unsigned int>(octets[0]) << '.'
+       << static_cast<unsigned int>(octets[1]) << '.'
+       << static_cast<unsigned int>(octets[2]) << '.'
+       << static_cast<unsigned int>(octets[3]);
+
+    return ip.str();
+}
+
 void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client> &clients, server_info &server){
 
-  int new_fd = accept(listenFd, NULL, NULL);
+  sockaddr_in client_addr = {};
+  socklen_t client_len = sizeof(client_addr);
+  
+
+  int new_fd = accept(listenFd, reinterpret_cast<sockaddr *>(&client_addr), &client_len);
   if (new_fd < 0){
     std::cerr << "Error: Couldn't accept new client\n";
     return ;
@@ -125,6 +144,7 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client
   }
 
   Client new_client;
+  new_client.client_ip = bytes_to_string(client_addr); 
   new_client.fd = new_fd;
   new_client.r_bytes = 0;
   new_client.w_bytes = 0;
@@ -328,6 +348,8 @@ bool sk_handle_pipes(CgiPipe pipe, CgiPipeMap &pipes, int i, std::vector<pollfd>
       return false;
     if(r > 0){
       pipe.client.cgi_rsp.raw_output.append(buffer, r);
+      if(pipe.client.cgi_rsp.raw_output.size() > MAX_CGI_OUTPUT)
+        return false;
       return true;
     }
     pipe.client.cgi_rsp.stdout_eof = true;
@@ -338,6 +360,23 @@ bool sk_handle_pipes(CgiPipe pipe, CgiPipeMap &pipes, int i, std::vector<pollfd>
   pipes.erase(pollfds[i].fd);
   pollfds.erase(pollfds.begin() + i);
   return true;
+}
+
+
+void sk_generate_error(Client &crnt_client, std::vector<pollfd> &pollfds, int i, int error_code){
+
+  crnt_client.parsed_req = HttpRequest();
+  ft_log_request(crnt_client.parsed_req);
+  ft_handle_error_3(crnt_client, error_code);
+  ft_log_response(crnt_client.rsp);
+  crnt_client.rsp.headers["Connection"] = "close";
+  HttpResponseBuilder builder;
+  builder.build(crnt_client.rsp);
+
+  crnt_client.r_bytes = 0;
+  crnt_client.status = WRITE_THEN_CLOSE;
+  crnt_client.t_out = get_time();
+  pollfds[i].events = POLLOUT;
 }
 
 int connection_handler(Config &cfg){
@@ -403,26 +442,6 @@ int connection_handler(Config &cfg){
       if(type == SERVER)
         continue;
 
-      // std::map<int, CgiPipe>::iterator f = pipes.find(pollfds[i].fd);
-      // if(f != pipes.end()){
-      //   type = CGI;
-      //   if(!sk_handle_pipes(f->second, pipes, i, pollfds)){
-      //     close(f->second.client.cgi_rsp.stdin_write_fd);
-      //     close(f->second.client.cgi_rsp.stdout_read_fd);
-      //     close(f->second.client.fd);
-      //     pollfds.erase(pollfds.begin() + i);
-      //     int other_fd = f->second.p_type == P_STDIN ? f->second.client.cgi_rsp.stdout_read_fd : f->second.client.cgi_rsp.stdin_write_fd; 
-      //     std::vector<pollfd>::iterator it = std::find(pollfds.begin(), pollfds.end(), other_fd);
-      //     if(it != pollfds.end())
-      //       pollfds.erase(it);
-      //     pollfds.erase(pollfds.begin() + f->second.client_index);
-      //     std::map<int, Client>::iterator found = clients.find(pollfds[i].fd);
-      //     clients.erase(found);
-      //     continue;
-      //   }
-      // }
-
-
       CgiPipeMap::iterator f = pipes.find(pollfds[i].fd);
       if(f != pipes.end()){
         int client_fd = f->second.client.fd;
@@ -459,66 +478,51 @@ int connection_handler(Config &cfg){
         clients_to_close.insert(crnt_client.fd);
         continue;
       }
-
-      if(pollfds[i].revents & POLLIN){
-        char buffer[R_BUFF_SIZE];
-        ssize_t res = recv(pollfds[i].fd, buffer, sizeof(buffer), 0);
-
-        // client sent data, write it in r_buff, parser reads it and continues creating request
-        if (res > 0){ 
-          crnt_client.r_bytes = res;
-          crnt_client.tr_bytes += res;
-          crnt_client.t_out = get_time();
-          crnt_client.request_buffer.append(buffer, res);
-          // crnt_client.parser.parse(crnt_client.request_buffer);
-        }
-
-        // client closes its end of write, switch to POLLOUT and send response
-          // (got a full request and generated a proper response /
-          //  got an unfinished request and generated an error response)
-          // client socket auto closes when timeout is reached
-        else if(res == 0){      
-          crnt_client.r_bytes = 0; // parser must stop expecting more reads and finish the response
-          crnt_client.status = WRITE_THEN_CLOSE; // write code should check for CLOSED before switching to READ and POLLIN, in that case close and cleanup
-          pollfds[i].events = POLLOUT;
-          crnt_client.t_out = get_time();
-
-          // TODO: generate a response
-          ft_log("here");
-          
-          continue;
-        }
-
-        // an error was flagged, but since we can't check errno we can't diff between
-          // a server breaking error and a simple pause flag sent by the client, so we close the socket
-        else if (res < 0){
-          clients_to_close.insert(crnt_client.fd);
-          continue;
-        }
-      }
       
       if(crnt_client.status == READ){
+
+        bool reached_eof = false;
+
+        if(pollfds[i].revents & POLLIN){
+          char buffer[R_BUFF_SIZE];
+          ssize_t res = recv(pollfds[i].fd, buffer, sizeof(buffer), 0);
+
+          // client sent data, write it in r_buff, parser reads it and continues creating request
+          if (res > 0){ 
+            crnt_client.r_bytes = res;
+            crnt_client.tr_bytes += res;
+            crnt_client.t_out = get_time();
+            crnt_client.request_buffer.append(buffer, res);
+            // crnt_client.parser.parse(crnt_client.request_buffer);
+          }
+
+          // client closes its end of write, switch to POLLOUT and send response
+            // (got a full request and generated a proper response /
+            //  got an unfinished request and generated an error response)
+            // client socket auto closes when timeout is reached
+          if(res == 0)
+            reached_eof = true;
+          //   crnt_client.r_bytes = 0; // parser must stop expecting more reads and finish the response
+          //   crnt_client.status = WRITE_THEN_CLOSE; // write code should check for CLOSED before switching to READ and POLLIN, in that case close and cleanup
+          //   pollfds[i].events = POLLOUT;
+          //   crnt_client.t_out = get_time();
+
+          //   // TODO: generate a response
+          //   ft_log("here");
+          // }
+
+          // an error was flagged, but since we can't check errno we can't diff between
+            // a server breaking error and a simple pause flag sent by the client, so we close the socket
+          else if (res < 0){
+            clients_to_close.insert(crnt_client.fd);
+            continue;
+          }
+        }
+
         crnt_client.parser.parse(crnt_client.request_buffer);
       
         if (crnt_client.parser.has_error()) {
-            ft_log("its a fucking errorrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr");
-  
-            const int error_code = crnt_client.parser.get_error_code();
-          
-
-            crnt_client.parsed_req = HttpRequest();
-            ft_log_request(crnt_client.parsed_req);
-            Execution exec_client(crnt_client);
-            exec_client.ft_handle_error_2(crnt_client, error_code);
-            ft_log_response(crnt_client.rsp);
-            crnt_client.rsp.headers["Connection"] = "close";
-            HttpResponseBuilder builder;
-            builder.build(crnt_client.rsp);
-
-            crnt_client.r_bytes = 0;
-            crnt_client.status = WRITE_THEN_CLOSE;
-            crnt_client.t_out = get_time();
-            pollfds[i].events = POLLOUT;
+            sk_generate_error(crnt_client, pollfds, i, crnt_client.parser.get_error_code());
             continue;
         }
 
@@ -551,6 +555,15 @@ int connection_handler(Config &cfg){
           HttpResponseBuilder builder;
           builder.build(crnt_client.rsp);
 
+        }
+
+        else if(reached_eof){
+          if(crnt_client.parser.get_state() == HttpParser::REQUEST_LINE && crnt_client.request_buffer.empty())
+            clients_to_close.insert(crnt_client.fd);
+          else{
+            sk_generate_error(crnt_client, pollfds, i, HttpParser::BAD_REQUEST);
+            continue;
+          }     
         }
 
       }  // [ ... ] call the parse and CGI functions, must communicate when client is removed

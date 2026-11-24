@@ -1,0 +1,115 @@
+Bug 2 — CGI timeout closes the client without returning 504
+He wrote:
+double timeout =
+    crnt_client.status == WAIT ? CGI_T_OUT : T_OUT;
+
+
+And later:
+if ((get_time() - crnt_client.t_out) > timeout)
+{
+    clients_to_close.insert(crnt_client.fd);
+    continue;
+}
+
+
+The timeout detection works, but a running CGI that exceeds 5 seconds simply gets disconnected.
+
+Your intended CGI behavior is:
+CGI timeout
+   |
+   v
+Terminate CGI child
+   |
+   v
+Close CGI pipes
+   |
+   v
+Generate 504 Gateway Timeout
+   |
+   v
+Send HTTP response
+
+
+This needs a separate CGI timeout/failure path that cleans up the child while keeping the client alive long enough to send the error.
+
+Priority: High, but it can be implemented after the first successful CGI response test.
+
+
+
+---------------------------------
+---------------------------------
+
+
+
+Bug 3 — CGI output has no memory limit
+In sk_handle_pipes():
+if (r > 0)
+{
+    pipe.client.cgi_rsp.raw_output.append(buffer, r);
+    return true;
+}
+
+
+This can keep growing indefinitely.
+
+You already decided on:
+#define MAX_CGI_OUTPUT (20 * 1024 * 1024)
+
+
+Dev 1 should check the size before appending data:
+std::string &output = pipe.client.cgi_rsp.raw_output;
+
+if (static_cast<size_t>(r) > MAX_CGI_OUTPUT - output.size())
+{
+    // Mark CGI output failure.
+    // Stop the CGI and prepare an error response.
+    return false;
+}
+
+output.append(buffer, r);
+
+
+The subtraction is safe only if output.size() is known not to exceed the maximum already.
+
+Currently, return false makes Dev 1 close the client, so he'll also need to connect that failure to the CGI error-response path.
+
+Priority: High for robustness; not needed to demonstrate the first small CGI response.
+
+
+
+---------------------------------
+---------------------------------
+
+
+
+Bug 4 — CGI pipe errors also disconnect clients without an error response
+In sk_handle_pipes(), errors from read(), write(), or POLLERR return false.
+
+The caller then does:
+clients_to_close.insert(client_fd);
+
+
+That is a valid cleanup strategy for a dead client, but a live client should receive an appropriate error response when CGI itself fails.
+
+The process cleanup code is largely there. The missing part is preserving the client and preparing an error response instead of treating every CGI error as a client disconnection.
+
+Priority: High for final integration.
+
+
+---------------------------------
+---------------------------------
+
+
+5. Additional issues to keep in mind
+These aren't reasons to rewrite the architecture, but they should be on your final testing checklist.
+Issue	Recommendation
+CGI reads can exceed MAX_CGI_OUTPUT	Add limit during stdout reading
+CGI pipe read()/write() failures always drop the client	Distinguish CGI failure from client failure
+CGI timeout drops the client	Produce 504 when the client is still connected
+gettimeofday()	Review against the subject's allowed external functions
+T_OUT = 500	500 ms may be too aggressive for ordinary clients
+CGI header size check	Your finish function currently compares headers with MAX_CGI_OUTPUT (20 MB), not a separate 16 KB header limit
+Finished CGI state	Reset before the next CGI request on a keep-alive connection
+Peer IP / REMOTE_ADDR	Still missing from the current accept() implementation
+
+One clarification about child_exit_status: Dev 1 currently stores the raw waitpid() status:

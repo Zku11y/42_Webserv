@@ -13,6 +13,8 @@ HttpResponseBuilder::HttpResponseBuilder() {
 	status_message[413] = "Content Too Large";
 	status_message[500] = "Internal Server Error";
 	status_message[501] = "Not Implemented";
+	status_message[502] = "Bad Gateway";
+	status_message[504] = "Gateway Timeout";
 	status_message[505] = "HTTP Version Not Supported";
 }
 

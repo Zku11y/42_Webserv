@@ -3,9 +3,11 @@
 #include "../main.hpp"
 #include "../core/server.hpp"
 
+#define MAX_CGI_OUTPUT  20 * 1024 * 1024
 class Execution
 {
     friend int connection_handler(Config &cfg);
+    friend void ft_cgi_finish(Client& client);
 
     private:
         int status;
@@ -86,9 +88,6 @@ class Execution
         void ft_cgi_child();
         int ft_cgi_parent(Client& client);
 
-
-
-
     public:
         Execution(Client& client);
         void ft_handle_resource(Client& client, Config& conf);
@@ -102,54 +101,4 @@ std::string ft_to_string(T value)
     return ss.str();
 }
 
-// later : remove .back()
-// later : ft_resolve_full_path()
-// later : encodeing space -> %20 ,ft_handle_G_autoindex()
-// later : url encoding , ft_handle_Redirect_2()
-
-
-
-
-// Validated CGI script
-// │
-// ├── 1. Extract effective script URI       ← START HERE
-// ├── 2. Extract physical script directory
-// ├── 3. Extract script filename
-// ├── 4. Prepare interpreter path
-// ├── 5. Prepare environment variables
-// ├── 6. Build envp array
-// └── 7. Build argv array
-
-
-
-// ft_handle_cgi()
-// │
-// ├── ft_cgi_init()             ✅
-// ├── ft_cgi_handle_path()      ✅
-// ├── ft_cgi_build_env()        ✅
-// ├── ft_cgi_build_argv()       ✅ (fix NULL)
-// │
-// ├── Create stdin pipe        ← NEXT
-// │   └── pipe(cgi_pipe_in)
-// │
-// ├── Create stdout pipe
-// │   └── pipe(cgi_pipe_out)
-// │
-// ├── Configure parent pipe FDs for nonblocking I/O
-// │
-// ├── fork()
-// │   │
-// │   ├── -1: Error
-// │   │
-// │   ├── 0: Child
-// │   │   ├── close unused pipe ends
-// │   │   ├── dup2() stdin
-// │   │   ├── dup2() stdout
-// │   │   ├── close original pipe FDs
-// │   │   ├── chdir(cgi_req_dir)
-// │   │   └── execve()
-// │   │
-// │   └── >0: Parent
-// │       ├── close unused pipe ends
-// │       ├── store PID and pipe FDs
-// │       └── integrate with Dev 1's poll loop
+void ft_cgi_finish(Client& client);

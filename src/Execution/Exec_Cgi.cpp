@@ -7,8 +7,8 @@
 /*                                              */
 /* **********************************************/
 
-
-static std::string	ft_to_upper(const std::string& str){
+static std::string	ft_to_upper(const std::string& str)
+{
 	std::string	result;
 
 	result = str;
@@ -22,6 +22,104 @@ static std::string	ft_to_upper(const std::string& str){
 	return "HTTP_"+result;
 }
 
+static int	ft_strtoi(const std::string& value)
+{
+	std::stringstream	s;
+	int					nm;
+	char				extra;
+
+	s << value;
+	if (!(s >> nm))
+        return -1;
+    if (s >> extra)
+        return -1;
+	
+    return nm;
+}
+
+static std::string	ft_to_lower_2(const std::string& str)
+{
+	std::string	result;
+
+	result = str;
+    for (size_t i = 0; i < result.size(); i++)
+    {
+        if (result[i] >= 'A' && result[i] <= 'Z')
+            result[i] = result[i] + ('a' - 'A');
+    }
+	return result;
+}
+
+static std::string ft_trim_2(const std::string& str)
+{
+    size_t first = str.find_first_not_of(" \t");
+
+    if (first == std::string::npos)
+        return "";
+
+    size_t last = str.find_last_not_of(" \t");
+
+    return str.substr(first, last - first + 1);
+}
+
+static std::vector<std::string> ft_split_2(const std::string& str, const std::string& del)
+{
+	std::vector<std::string>	res;
+	size_t						start;
+	size_t						pos;
+
+	if (del.empty()){
+		res.push_back(str);
+		return res;
+	}
+	start = 0;
+	while (true){
+		pos = str.find(del, start);
+		if (pos == std::string::npos){
+			res.push_back(str.substr(start));
+			break;
+		}
+		res.push_back(str.substr(start, pos - start));
+		start = pos + del.length();
+	}
+	return res;
+}
+
+static bool    is_token_char_2(char c)
+{
+	if (std::isalnum(static_cast<unsigned char>(c)))
+		return true;
+	if (c == '!' || c == '#' || c == '$' || c == '%'
+		||c == '&' || c == '\'' || c == '*' || c == '+'
+		|| c == '-' || c == '.' || c == '^' || c == '_'
+		|| c == '`' || c == '|' || c == '~')
+		return true;
+	return false;
+}
+
+static bool	valid_header_name_2(const std::string& name)
+{
+	if (name.empty())
+		return false;
+	for (size_t a = 0; a < name.size(); a++){
+		if (!is_token_char_2(name[a]))
+			return false;
+	}
+	return true;
+}
+
+static bool	valid_header_value_2(const std::string& value)
+{
+	unsigned char	c;
+	for (size_t a = 0; a < value.size(); a++){
+		c = static_cast<unsigned char>(value[a]);
+		if (c < 32 && c != '\t')
+			return false;
+		if (c == 127)
+			return false;
+	}
+	return true;
+}
 
 
 /* **********************************************/
@@ -29,7 +127,6 @@ static std::string	ft_to_upper(const std::string& str){
 /*                  Cgi main :                  */
 /*                                              */
 /* **********************************************/
-
 
 void Execution::ft_handle_cgi(Client& client)
 {
@@ -102,18 +199,18 @@ void Execution::ft_handle_cgi(Client& client)
 
 int Execution::ft_cgi_init()
 {
-    std::vector<std::string> tmp_1=ft_split(full_path,'/');
+    std::vector<std::string> tmp_head=ft_split(full_path,'/');
     
     cgi_req_dir.clear();
     cgi_req_file.clear();
 
-    for(size_t i=0; i<tmp_1.size();i++)
+    for(size_t i=0; i<tmp_head.size();i++)
     {
-        if(i==tmp_1.size()-1)
-            cgi_req_file=tmp_1[i];
+        if(i==tmp_head.size()-1)
+            cgi_req_file=tmp_head[i];
         else
         {
-            cgi_req_dir+=tmp_1[i];
+            cgi_req_dir+=tmp_head[i];
             cgi_req_dir+="/";
         }
     }
@@ -204,7 +301,7 @@ int Execution::ft_cgi_build_env()
 
         for(size_t i = 0; i < tmp.size(); i++)
         {
-            std::string name = ft_to_lower(ft_trim(tmp[i]));
+            std::string name = ft_to_lower_2(ft_trim(tmp[i]));
 
             if(!name.empty())
                 skip.push_back(name);
@@ -297,6 +394,7 @@ int Execution::ft_cgi_build_pipes()
     return 0;
 }
 
+
 /* **********************************************/
 /*                                              */
 /*               Child process :                */
@@ -333,4 +431,243 @@ void Execution::ft_cgi_child()
 
     execve(cgi_path.c_str(), &argv_env_2[0], &cgi_env_2[0]);
     std::exit(126);
+}
+
+
+/* **********************************************/
+/*                                              */
+/*                Cgi result :                  */
+/*                                              */
+/* **********************************************/
+
+static void ft_handle_error_3(Client& client, int s)
+{
+    client.rsp.status_code=s;
+    client.rsp.headers.clear();
+    client.rsp.headers["Content-Type"] = "text/html";
+
+    std::stringstream ss;
+    ss << "<html><body><h1>"
+       << client.rsp.status_code;
+    if(s==502)
+        ss << " Bad Gateway ";
+    else if(s==504)
+        ss << " Gateway Timeout ";
+    else
+        ss << " Internal Server Error ";
+        
+    ss << "</h1></body></html>";
+
+    if(client.rsp.body_fd!=-1)
+        close(client.rsp.body_fd);
+    client.rsp.body_fd=-1;
+
+    client.rsp.body=ss.str();
+    client.rsp.body_size=client.rsp.body.size();
+
+    client.rsp.headers["Content-Length"]=ft_to_string(client.rsp.body_size);
+
+    return;
+}
+
+void ft_cgi_finish(Client& client)
+{
+    Execution exc(client);
+
+    if (!client.cgi_rsp.stdout_eof || !client.cgi_rsp.child_reaped)
+        return;
+
+    if (client.cgi_rsp.child_exit_status != 0 ||
+        client.cgi_rsp.raw_output.empty())
+    {
+        ft_handle_error_3(client, 502);
+        return;
+    }
+
+    std::string tmp_heads;
+    std::string tmp_body;
+    std::string tmp_del;
+
+    size_t ps;
+
+    tmp_del = "\r\n";
+    ps = client.cgi_rsp.raw_output.find("\r\n\r\n");
+
+    if (ps == std::string::npos)
+    {
+        tmp_del = "\n";
+        ps = client.cgi_rsp.raw_output.find("\n\n");
+
+        if (ps == std::string::npos)
+        {
+            ft_handle_error_3(client, 502);
+            return;
+        }
+    }
+
+    tmp_heads = client.cgi_rsp.raw_output.substr(0, ps);
+    if (tmp_heads.size() > MAX_CGI_OUTPUT)
+    {
+        ft_handle_error_3(client, 502);
+        return;
+    }
+    tmp_body = client.cgi_rsp.raw_output.substr(ps + tmp_del.size() * 2);
+
+
+    std::map<std::string, std::string> tmp_headers;
+    int tmp_status = 200;
+    
+    bool f_has_status = false;
+    bool f_has_location = false;
+    bool f_has_content_type = false;
+
+
+    std::vector<std::string> tmp_1 = ft_split_2(tmp_heads, tmp_del);
+    for (size_t i = 0; i < tmp_1.size(); i++)
+    {
+        ps = tmp_1[i].find(':');
+
+        if (ps == std::string::npos)
+        {
+            ft_handle_error_3(client, 502);
+            return;
+        }
+
+        std::string tmp_2_key = tmp_1[i].substr(0, ps);
+        std::string tmp_3_val = tmp_1[i].substr(ps + 1);
+        
+        if (!valid_header_name_2(tmp_2_key) ||
+            !valid_header_value_2(tmp_3_val))
+        {
+            ft_handle_error_3(client, 502);
+            return;
+        }
+
+        std::string key = ft_to_lower_2(tmp_2_key);
+        tmp_3_val = ft_trim_2(tmp_3_val);
+
+
+        if (key == "status")
+        {
+            if (f_has_status)
+            {
+                ft_handle_error_3(client, 502);
+                return;
+            }
+
+            f_has_status = true;
+
+            if (tmp_3_val.size() < 3 ||
+                    tmp_3_val.substr(0, 3).find_first_not_of("0123456789") != std::string::npos ||
+                    (tmp_3_val.size() > 3 && tmp_3_val[3] != ' '))
+                {
+                    ft_handle_error_3(client, 502);
+                    return;
+                }
+
+            int code = ft_strtoi(tmp_3_val.substr(0, 3));
+
+            if (code < 200 || code > 599)
+            {
+                ft_handle_error_3(client, 502);
+                return;
+            }
+
+            tmp_status = code;
+        }
+        else if (key == "location")
+        {
+            if (f_has_location || tmp_3_val.empty())
+            {
+                ft_handle_error_3(client, 502);
+                return;
+            }
+
+            f_has_location = true;
+            tmp_headers["location"] = tmp_3_val;
+        }
+        else if (key == "content-type")
+        {
+            if (f_has_content_type || tmp_3_val.empty())
+            {
+                ft_handle_error_3(client, 502);
+                return;
+            }
+
+            f_has_content_type = true;
+            tmp_headers["content-type"] = tmp_3_val;
+        }
+        else if (
+            key == "content-length" ||
+            key == "transfer-encoding" ||
+            key == "connection" ||
+            key == "keep-alive" ||
+            key == "te" ||
+            key == "trailer" ||
+            key == "upgrade" ||
+            key == "proxy-connection"
+        )
+        {
+            continue;
+        }
+        else
+        {
+            tmp_headers[key] = tmp_3_val;
+        }
+    }
+
+    // 4. Handle Location without explicit Status
+    if (f_has_location && !f_has_status)
+    {
+        std::string location = ft_to_lower_2(tmp_headers["location"]);
+
+        if (location.compare(0, 7, "http://") == 0 ||
+            location.compare(0, 8, "https://") == 0)
+        {
+            if (!tmp_body.empty())
+            {
+                ft_handle_error_3(client, 502);
+                return;
+            }
+
+            tmp_status = 302;
+        }
+        else
+        {
+            ft_handle_error_3(client, 502);
+            return;
+        }
+    }
+
+    // 5. Validate required Content-Type
+    if (!f_has_content_type && !f_has_location &&
+        tmp_status != 204 &&
+        tmp_status != 205 &&
+        tmp_status != 304)
+    {
+        ft_handle_error_3(client, 502);
+        return;
+    }
+
+    // 6. Validate bodyless statuses
+    if ((tmp_status == 204 ||
+         tmp_status == 205 ||
+         tmp_status == 304) &&
+        !tmp_body.empty())
+    {
+        ft_handle_error_3(client, 502);
+        return;
+    }
+
+    if (client.rsp.body_fd != -1)
+        close(client.rsp.body_fd);
+    client.rsp.body_fd = -1;
+
+    client.rsp.status_code = tmp_status;
+    client.rsp.headers = tmp_headers;
+
+    client.rsp.body = tmp_body;
+    client.rsp.body_size = tmp_body.size();
+
+    client.rsp.responc.clear();
 }

@@ -6,6 +6,7 @@ struct HttpRequest
 {
 	std::string							method;
 	std::string							target;
+	std::string							OG_path;
 	std::string							path;
     std::string							queryString;
 	std::string							version;
@@ -21,6 +22,8 @@ struct HttpRequest
 
 class HttpParser
 {
+	friend class Execution;
+
 	public:
 		enum State
 		{
@@ -61,8 +64,11 @@ class HttpParser
 		bool		set_error(ErrorCode code);
 
 		///// request-line helpers
-		bool	valid_method(const std::string& method) const;
-		bool	valid_target(const std::string& target) const;
+		bool		valid_method(const std::string& method) const;
+		bool		valid_target(const std::string& target) const;
+		std::string	decode_path(const std::string&	path) const;
+		int			hex_value(char c) const;
+		bool		valid_decoded_path(const std::string& path) const;
 
 		///// headers helpers
 		std::string	trim_ows(const std::string& str) const;

@@ -1,0 +1,5 @@
+print("Status: 201 Created")
+print("Content-Type: text/plain")
+print("X-CGI-Test: passed")
+print()
+print("CGI custom status works!")

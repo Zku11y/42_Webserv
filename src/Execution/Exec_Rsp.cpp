@@ -799,7 +799,7 @@ void Execution::ft_error_2(Client& client)
     std::stringstream ss;
     ss << "<html><body><h1>"
        << client.rsp.status_code
-       << " Error XD" // change it later to custome msg
+       << " Error " // change it later to custome msg
        << "</h1></body></html>";
 
     if(client.rsp.body_fd!=-1)

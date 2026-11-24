@@ -1,10 +1,6 @@
 #include "../../inc/main.hpp"
 #include "../../inc/core/server.hpp"
 #include "../../inc/Execution/Execution.hpp"
-#include <cerrno>
-#include <cstdlib>
-#include <fcntl.h>
-#include <sys/poll.h>
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
@@ -12,8 +8,6 @@
 
 // ----------------------------------------------------------
 // ----------------------------------------------------------
-
-// hi
 
 static void ft_log_request(const HttpRequest& req)
 {
@@ -81,7 +75,7 @@ static void ft_log_response(const HttpResponse& rsp)
     ft_log("String Size   : [" << rsp.body.size() << "] bytes");
 
     if (rsp.body_fd == -1)
-        ft_log("Body Content  : [" << rsp.body << "]");
+        ft_log("Body Content  : [" << rsp.body.substr(0, 200)  << "]");
     else
         ft_log("Body Content  : [Stored in file descriptor "
                << rsp.body_fd << "]");
@@ -124,7 +118,7 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client
     return ;
   }
   
-  if(!set_non_blocking(new_fd) || fcntl(new_fd, F_SETFD, FD_CLOEXEC < 0)){
+  if(!set_non_blocking(new_fd) || fcntl(new_fd, F_SETFD, FD_CLOEXEC) < 0){
     std::cerr << "Error: Couldn't set client fd to non blocking\n";
     close(new_fd);
     return ;
@@ -679,17 +673,37 @@ int connection_handler(Config &cfg){
             cgi.child_exit_status = status;
         }
 
-        if (!WIFEXITED(cgi.child_exit_status)
-            || WEXITSTATUS(cgi.child_exit_status) != 0)
-        {
-            clients_to_close.insert(client.fd);
-            continue;
-        }
-
         if (!cgi.stdout_eof)
             continue;
 
+        // Close remaining CGI descriptors before finalizing.
         sk_close_pipe(cgi.stdin_write_fd, pipes, pollfds);
+        sk_close_pipe(cgi.stdout_read_fd, pipes, pollfds);
+
+        // Dev 3: Parse CGI output or generate a 502 response.
+        ft_cgi_finish(client);
+
+        ft_log_response(client.rsp);
+
+        // Dev 1: Serialize HTTP response.
+        HttpResponseBuilder builder;
+        builder.build(client.rsp);
+
+        // Transition WAIT -> WRITE.
+        client.status = WRITE;
+        client.t_out = get_time();
+
+        // Reactivate the client's socket for sending.
+        for (size_t k = 0; k < pollfds.size(); ++k)
+        {
+            if (pollfds[k].fd == client.fd)
+            {
+                pollfds[k].events = POLLOUT;
+                break;
+            }
+        } 
+      
+    
     }
   
     for(std::set<int>::iterator it = clients_to_close.begin();
@@ -742,6 +756,7 @@ int main(int ac, char **av){
 
   try{
     Config cfg(configFile);
+    ft_log("Starting in 3, 2, 1......");
     connection_handler(cfg);
 
   }catch(std::exception &e){

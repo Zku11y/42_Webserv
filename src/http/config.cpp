@@ -2,6 +2,26 @@
 #include "../../inc/http/config.hpp"
 #include "../../inc/http/configParser.hpp"
 
+static bool	hasDot(const std::string& path){
+	size_t		start;
+	size_t		end;
+	std::string	part;
+
+	start = 0;
+	while (start < path.size())
+	{
+		end = path.find('/', start);
+		if (end == std::string::npos)
+			end = path.size();
+		part = path.substr(start, end - start);
+		if (part == "." || part == "..")
+			return true;
+		start = end + 1;
+	}
+	return false;
+}
+
+
 LocationConfig::LocationConfig() : _autoindex(false), _uploadEnable(false), _returnCode(0){}
 LocationConfig::~LocationConfig(){}
 
@@ -38,22 +58,65 @@ void	LocationConfig::validateUpload() const{
 
 void	LocationConfig::validateCgi() const{
 	std::map<std::string, std::string>::const_iterator	it = _cgi.begin();
+
 	while (it != _cgi.end()){
 		if (it->first.empty() || it->first[0] != '.')
 			throw std::runtime_error("CGI extension must start with a '.'");
+		if (it->first.size() == 1)
+			throw std::runtime_error("CGI extension cannot be empty");
+		if (it->first.find('/') != std::string::npos)
+			throw std::runtime_error("CGI extension cannot contain '/'");
+		if (it->first.find('.', 1) != std::string::npos)
+			throw std::runtime_error("CGI extension cannot contain multiple dots");
 		if (it->second.empty())
 			throw std::runtime_error("CGI interpreter cannot be empty");
+		if (hasDot(it->second))
+			throw std::runtime_error("CGI interpreter cannot contain dot segments");
 		it++;
 	}
 }
 
+bool	LocationConfig::validLocationPath(const std::string& path) const{
+	size_t	start;
+	size_t	end;
+	std::string	part;
+
+	if (path.empty() || path[0] != '/')
+		return false;
+	start = 1;
+	while (start < path.size()){
+		end = path.find('/', start);
+		if (end == std::string::npos)
+			end = path.size();
+		part = path.substr(start, end - start);
+		if (part == "." || part == "..")
+			return false;
+		if (part.empty() && end != path.size())
+			return false;
+		start = end + 1;
+	}
+	return true;
+}
+
+void	LocationConfig::validateIndex() const{
+	if (_index.empty())
+		return;
+	if (_index == "." || _index == "..")
+		throw std::runtime_error("Invalid index filename");
+	if (_index[0] == '/')
+		throw std::runtime_error("Index cannot be an absolute path");
+	if (_index.find('/') != std::string::npos)
+		throw std::runtime_error("Index must be a simple filename");
+}
+
 void	LocationConfig::validate() const{
-	if (_path.empty() || _path[0] != '/')
-		throw std::runtime_error("Location must start with '/'");
+	if (!validLocationPath(_path))
+		throw std::runtime_error("Invalid location path: " + _path);
 	validateMethods();
 	validateReturn();
 	validateUpload();
 	validateCgi();
+	validateIndex();
 	if (_returnCode == 0 && _root.empty())
 		throw std::runtime_error("Location requires root unless it redirects");
 }
@@ -154,8 +217,22 @@ const std::map<std::string, std::string>&	LocationConfig::getCGI() const{
 
 
 
-ServerConfig::ServerConfig() : _port(0), _clientMaxBodySize(0) {}
+ServerConfig::ServerConfig() : _port(0), _ip(0), _clientMaxBodySize(0) {}
 ServerConfig::~ServerConfig(){}
+
+void	ServerConfig::validateErrorPages() const{
+	std::map<int, std::string>::const_iterator	it;
+
+	it = _errorPages.begin();
+	while (it != _errorPages.end())
+	{
+		if (it->second.empty())
+			throw std::runtime_error("Error page path cannot be empty");
+		if (hasDot(it->second))
+			throw std::runtime_error("Error page path cannot contain dot segments");
+		it++;
+	}
+}
 
 void	ServerConfig::validateLocations() const{
 	std::set<std::string>	seen;
@@ -173,6 +250,9 @@ void	ServerConfig::validate() const{
 		throw std::runtime_error("Server is missing listen directive");
 	if (_host.empty())
 		throw std::runtime_error("Server is missing host directive");
+	if (_locations.empty())
+		throw std::runtime_error("Server requires at least one location");
+	validateErrorPages();
 	validateLocations();
 }
 
@@ -183,13 +263,17 @@ void	ServerConfig::setPort(int port){
 	_port = port;
 }
 
+void	ServerConfig::setIp(uint32_t ip){
+	_ip = ip;
+}
+
 void	ServerConfig::setHost(const std::string& host){
 	_host = host;
 }
 
-void	ServerConfig::setServerName(const std::string& name){
-	_serverName = name;
-}
+// void	ServerConfig::setServerName(const std::string& name){
+// 	_serverName = name;
+// }
 
 void	ServerConfig::setClientMaxBodySize(size_t size){
 	_clientMaxBodySize = size;
@@ -214,13 +298,17 @@ int	ServerConfig::getPort() const{
 	return _port;
 }
 
+uint32_t	ServerConfig::getIp() const{
+	return _ip;
+}
+
 const std::string&	ServerConfig::getHost() const{
 	return _host;
 }
 
-const std::string&	ServerConfig::getServerName() const{
-	return _serverName;
-}
+// const std::string&	ServerConfig::getServerName() const{
+// 	return _serverName;
+// }
 
 size_t	ServerConfig::getClientMaxBodySize() const{
 	return _clientMaxBodySize;

@@ -143,7 +143,7 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client
     return ;
   }
 
-  Client new_client;
+  Client new_client = {};
   new_client.client_ip = bytes_to_string(client_addr); 
   new_client.fd = new_fd;
   new_client.r_bytes = 0;
@@ -569,20 +569,19 @@ int connection_handler(Config &cfg){
       }  // [ ... ] call the parse and CGI functions, must communicate when client is removed
           // get info on request finished to switch event to POLLOUT + status to WRITE and vise versa with the response 
 
-
       if(pollfds[i].revents & POLLOUT){
- 
+
       //	else if (crnt_client.rsp.body_size <= MAX_INLINE_BODY)
       // 
 
         if(crnt_client.rsp.body_fd != -1 && crnt_client.tw_bytes == crnt_client.rsp.responc.size()){
 
 //          std::cout << "ITS USING THE BODY_FD FINALLYYYYYYYYY\n";
-    
+  
           char buff[W_BUFF_SIZE];
           if(crnt_client.response_buffer.empty()){
             ssize_t red = read(crnt_client.rsp.body_fd, buff, sizeof(buff));
-  
+
             if(red > 0){
               crnt_client.response_buffer.append(buff, red);
             }
@@ -590,8 +589,13 @@ int connection_handler(Config &cfg){
               close(crnt_client.rsp.body_fd); // should i close this fd or do the other's code close it?
               crnt_client.rsp.body_fd = -1;
             }
+            if(red < 0){
+              clients_to_close.insert(crnt_client.fd);
+              continue;
+            }
 
           }
+          
           if(!crnt_client.response_buffer.empty()){
              ssize_t res = send(pollfds[i].fd, crnt_client.response_buffer.c_str(), crnt_client.response_buffer.size(), MSG_NOSIGNAL);
 
@@ -606,7 +610,7 @@ int connection_handler(Config &cfg){
               continue;
             } 
           }
-          
+        
           continue;
         }
 
@@ -648,7 +652,6 @@ int connection_handler(Config &cfg){
           }
         }
       }
-     
       
     
     } // for()
@@ -689,24 +692,19 @@ int connection_handler(Config &cfg){
         if (!cgi.stdout_eof)
             continue;
 
-        // Close remaining CGI descriptors before finalizing.
         sk_close_pipe(cgi.stdin_write_fd, pipes, pollfds);
         sk_close_pipe(cgi.stdout_read_fd, pipes, pollfds);
 
-        // Dev 3: Parse CGI output or generate a 502 response.
         ft_cgi_finish(client);
 
         ft_log_response(client.rsp);
 
-        // Dev 1: Serialize HTTP response.
         HttpResponseBuilder builder;
         builder.build(client.rsp);
 
-        // Transition WAIT -> WRITE.
         client.status = WRITE;
         client.t_out = get_time();
 
-        // Reactivate the client's socket for sending.
         for (size_t k = 0; k < pollfds.size(); ++k)
         {
             if (pollfds[k].fd == client.fd)
@@ -760,8 +758,9 @@ int connection_handler(Config &cfg){
 int main(int ac, char **av){
 
   std::string configFile;
-  configFile = (ac != 2) ? "default.conf" : av[1];
 
+  if(ac != 2) return 1;
+  
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
       std::cerr << "Error: couldn't ignore SIGPIPE\n";
       return 1;

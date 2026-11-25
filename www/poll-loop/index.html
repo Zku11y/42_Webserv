@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A C++98 review guide for the 42 Webserv poll loop.">
+  <meta name="theme-color" content="#10131b">
+  <title>Poll loop review · 42 Webserv</title>
+  <link rel="stylesheet" href="guide.css">
+  <script defer src="guide.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to the guide</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./" aria-label="42 Webserv poll loop review">
+        <span class="brand-mark" aria-hidden="true">42</span><span>Webserv<span class="brand-divider">/</span><span class="brand-section">Engineering notes</span></span>
+      </a>
+      <a class="home-link" href="/">Server home</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <nav aria-label="Guide contents">
+        <h2>In this guide</h2>
+        <ol>
+          <li><a href="#file-length"><span>01</span>File response length</a></li>
+          <li><a href="#cgi-errors"><span>02</span>CGI failures and timeouts</a></li>
+          <li><a href="#keep-alive"><span>03</span>Connection close</a></li>
+          <li><a href="#initialization"><span>04</span>Initialize client state</a></li>
+          <li><a href="#listeners"><span>05</span>Listener setup</a></li>
+          <li><a href="#deadlines"><span>06</span>Deadlines and backpressure</a></li>
+        </ol>
+      </nav>
+      <p class="sidebar-source"><strong>Reviewed source</strong><br><code>src/core/server.cpp</code><br><code>inc/core/server.hpp</code></p>
+    </aside>
+
+    <main id="main">
+      <div class="hero">
+        <div class="hero-copy">
+          <h1>Poll loop<br> review</h1>
+          <p>Six remaining issues in the connection handler, with C++98 examples and a way to check each fix.</p>
+          <a class="start-link" href="#file-length">Start with file responses</a>
+        </div>
+        <div class="state-map">
+          <h2>Client state transitions</h2>
+          <pre aria-label="A regular request goes from READ to WRITE. A CGI request goes from READ to WAIT and then WRITE. A persistent connection returns to READ. WRITE_THEN_CLOSE ends with cleanup.">READ ───────────────► <span>WRITE</span>
+READ ───► <b>WAIT</b> ─────► <span>WRITE</span>
+<span>WRITE</span> ── keep-alive ► READ
+<span>WRITE_THEN_CLOSE</span> ───► cleanup</pre>
+        </div>
+      </div>
+
+      <div class="resolved">
+        <span class="resolved-mark" aria-hidden="true">✓</span>
+        <div><h2>Already handled in this checkout</h2><p><code>WRITE_THEN_CLOSE</code> reaches the write block, a negative file read queues cleanup, and CGI receives the peer IP in <code>REMOTE_ADDR</code>.</p></div>
+      </div>
+
+      <section class="lesson" id="file-length" aria-labelledby="file-length-title">
+  <div class="lesson-head"><span class="step" aria-label="Issue 01">01</span><div><h2 id="file-length-title">File response length</h2><p>Send exactly the number of bytes advertised in Content-Length.</p></div></div>
+  
+<div class="explanation">
+  <div><h3>Problem</h3><p>The current sender reads the open file until EOF. If the file grows, the next bytes on the connection can exceed the advertised length. If it shrinks, the server can return to <code>READ</code> with part of the response still owed. Your negative-read branch already queues cleanup.</p></div>
+  <div><h3>Solution</h3><p>Give the poll loop sole ownership of file reads. Remove the small-file FD read in <code>HttpResponseBuilder::build()</code>, so <code>responc</code> contains headers only whenever <code>body_fd</code> is open. Set a new <code>size_t file_bytes_left</code> field to <code>rsp.body_size</code> after building a file response. Start and reset it at zero.</p></div>
+</div>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Send one file chunk on POLLOUT</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Send one file chunk on POLLOUT"><code><span class="tok-keyword">bool</span> sk_send_file_chunk(Client &amp;client)
+{
+    <span class="tok-keyword">if</span> (client.file_bytes_left &gt; <span class="tok-constant">0</span>) {
+        <span class="tok-keyword">if</span> (client.response_buffer.empty()) {
+            <span class="tok-keyword">char</span> buffer[W_BUFF_SIZE];
+            <span class="tok-keyword">size_t</span> limit = std::min(client.file_bytes_left, <span class="tok-keyword">sizeof</span>(buffer));
+            <span class="tok-keyword">ssize_t</span> count = read(client.rsp.body_fd, buffer, limit);
+
+            <span class="tok-keyword">if</span> (count &lt;= <span class="tok-constant">0</span>)
+                <span class="tok-keyword">return</span> <span class="tok-keyword">false</span>;
+            client.response_buffer.append(buffer, count);
+        }
+
+        <span class="tok-keyword">ssize_t</span> sent = send(client.fd, client.response_buffer.data(),
+                            client.response_buffer.size(), <span class="tok-constant">MSG_NOSIGNAL</span>);
+        <span class="tok-keyword">if</span> (sent &lt; <span class="tok-constant">0</span>)
+            <span class="tok-keyword">return</span> <span class="tok-keyword">false</span>;
+
+        <span class="tok-keyword">if</span> (sent &gt; <span class="tok-constant">0</span>) {
+            client.response_buffer.erase(<span class="tok-constant">0</span>, <span class="tok-keyword">static_cast</span>&lt;<span class="tok-keyword">size_t</span>&gt;(sent));
+            client.file_bytes_left -= <span class="tok-keyword">static_cast</span>&lt;<span class="tok-keyword">size_t</span>&gt;(sent);
+            client.t_out = get_time();
+        }
+    }
+
+    <span class="tok-keyword">if</span> (client.file_bytes_left == <span class="tok-constant">0</span>) {
+        close(client.rsp.body_fd);
+        client.rsp.body_fd = -<span class="tok-constant">1</span>;
+    }
+    <span class="tok-keyword">return</span> <span class="tok-keyword">true</span>;
+}</code></pre>
+</figure>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Replace the old file branch after the prefix is sent</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Replace the old file branch after the prefix is sent"><code><span class="tok-keyword">if</span> (crnt_client.rsp.body_fd &gt;= <span class="tok-constant">0</span>
+    &amp;&amp; crnt_client.tw_bytes == crnt_client.rsp.responc.size()) {
+    <span class="tok-keyword">if</span> (!sk_send_file_chunk(crnt_client)) {
+        clients_to_close.insert(crnt_client.fd);
+        <span class="tok-keyword">continue</span>;
+    }
+    <span class="tok-keyword">if</span> (crnt_client.rsp.body_fd &gt;= <span class="tok-constant">0</span>)
+        <span class="tok-keyword">continue</span>;
+}
+<span class="tok-comment">// Leave the existing response-completion check below this point.</span></code></pre>
+</figure>
+<p class="detail">A partial <code>send()</code> leaves bytes in <code>response_buffer</code> for the next writable pass. An empty file closes immediately. If <code>read()</code> fails or returns zero while bytes are owed, the cleanup pass closes both descriptors. The status and headers are already on the wire.</p>
+<div class="check"><strong>Check the fix</strong><p>Compare the bytes received for an empty file, a small file, and a multichunk file. A file that grows should send no extra bytes. An early file EOF should close the connection.</p></div>
+
+</section>
+<section class="lesson" id="cgi-errors" aria-labelledby="cgi-errors-title">
+  <div class="lesson-head"><span class="step" aria-label="Issue 02">02</span><div><h2 id="cgi-errors-title">CGI failures and timeouts</h2><p>Keep the socket available long enough to send the CGI error.</p></div></div>
+  
+<div class="explanation">
+  <div><h3>Problem</h3><p>A <code>WAIT</code> timeout, a failed pipe, or a failed pipe registration currently queues the entire client for closing. The configured <code>504</code> and <code>502</code> responses can therefore go unsent.</p></div>
+  <div><h3>Solution</h3><p>During the indexed poll scan, record a pending CGI error by client socket FD. Use <code>504</code> for a CGI deadline, <code>502</code> for output and pipe failures, and <code>500</code> for local setup errors. Keep transport failures in <code>clients_to_close</code>. Apply CGI errors after the indexed scan, when removing both pipes can safely shift the vector.</p></div>
+</div>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Record each failure in its existing branch</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Record each failure in its existing branch"><code>// Create this next to clients_to_close before the reverse scan.
+std::map&lt;int, int&gt; cgi_failures;
+
+// In pipe dispatch, skip clients already queued in either container.
+if (clients_to_close.count(client_fd) || cgi_failures.count(client_fd))
+    continue;
+if (!sk_handle_pipes(f-&gt;second, pipes, i, pollfds))
+    cgi_failures[client_fd] = 502;
+
+// In the socket branch, keep transport errors on clients_to_close.
+// Replace the timeout part of the existing condition with this.
+if (get_time() - crnt_client.t_out &gt; timeout) {
+    if (crnt_client.status == WAIT)
+        cgi_failures.insert(std::make_pair(crnt_client.fd, 504));
+    else
+        clients_to_close.insert(crnt_client.fd);
+    continue;
+}
+
+// In WAIT setup, replace the insert into clients_to_close.
+if (!sk_add_pipes(pipes, pollfds, crnt_client))
+    cgi_failures[crnt_client.fd] = 500;</code></pre>
+</figure>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Detach CGI and transfer responsibility for reaping</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Detach CGI and transfer responsibility for reaping"><code><span class="tok-keyword">void</span> sk_retire_cgi(Client &amp;client, CgiPipeMap &amp;pipes,
+                   std::vector&lt;pollfd&gt; &amp;pollfds,
+                   std::vector&lt;<span class="tok-keyword">pid_t</span>&gt; &amp;retired_pids)
+{
+    CgiState &amp;cgi = client.cgi_rsp;
+
+    sk_close_pipe(cgi.stdin_write_fd, pipes, pollfds);
+    sk_close_pipe(cgi.stdout_read_fd, pipes, pollfds);
+    <span class="tok-keyword">if</span> (cgi.pid &gt; <span class="tok-constant">0</span> &amp;&amp; !cgi.child_reaped) {
+        retired_pids.push_back(cgi.pid);
+        kill(cgi.pid, <span class="tok-constant">SIGKILL</span>);
+    }
+    cgi.pid = -<span class="tok-constant">1</span>;
+    cgi.raw_output.clear();
+}</code></pre>
+</figure>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Apply queued errors after the CGI waitpid pass</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Apply queued errors after the CGI waitpid pass"><code><span class="tok-comment">// Place this before the existing client cleanup.</span>
+<span class="tok-keyword">for</span> (std::map&lt;<span class="tok-keyword">int</span>, <span class="tok-keyword">int</span>&gt;::const_iterator error = cgi_failures.begin();
+     error != cgi_failures.end(); ++error) {
+    <span class="tok-keyword">int</span> fd = error-&gt;first;
+    std::map&lt;<span class="tok-keyword">int</span>, Client&gt;::iterator entry = clients.find(fd);
+
+    <span class="tok-keyword">if</span> (entry == clients.end() || clients_to_close.count(fd))
+        <span class="tok-keyword">continue</span>;
+
+    Client &amp;client = entry-&gt;second;
+    sk_retire_cgi(client, pipes, pollfds, retired_pids);
+
+    <span class="tok-comment">// Find the socket index after both pipe entries have been erased.</span>
+    <span class="tok-keyword">size_t</span> i = <span class="tok-constant">0</span>;
+    <span class="tok-keyword">while</span> (i &lt; pollfds.size() &amp;&amp; pollfds[i].fd != fd)
+        ++i;
+    <span class="tok-keyword">if</span> (i == pollfds.size()) {
+        clients_to_close.insert(fd);
+        <span class="tok-keyword">continue</span>;
+    }
+    sk_generate_error(client, pollfds, i, error-&gt;second);
+}</code></pre>
+</figure>
+<p class="detail">In the normal CGI finalization loop, skip FDs present in either queue. Keep the <code>EINTR</code> retry and invalidate the PID on <code>ECHILD</code> before queuing a <code>500</code> for a failed <code>waitpid()</code>. Reuse <code>sk_retire_cgi()</code> when the socket itself disappears. The retired-PID sweep calls <code>waitpid(..., WNOHANG)</code> after either path.</p>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Check the CGI output limit before appending</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Check the CGI output limit before appending"><code><span class="tok-keyword">if</span> (r &gt; <span class="tok-constant">0</span>) {
+    std::string &amp;output = pipe.client.cgi_rsp.raw_output;
+    <span class="tok-keyword">const</span> <span class="tok-keyword">size_t</span> limit = <span class="tok-constant">MAX_CGI_OUTPUT</span>;
+    <span class="tok-keyword">const</span> <span class="tok-keyword">size_t</span> received = <span class="tok-keyword">static_cast</span>&lt;<span class="tok-keyword">size_t</span>&gt;(r);
+
+    <span class="tok-keyword">if</span> (output.size() &gt; limit || received &gt; limit - output.size())
+        <span class="tok-keyword">return</span> <span class="tok-keyword">false</span>;
+    output.append(buffer, received);
+    <span class="tok-keyword">return</span> <span class="tok-keyword">true</span>;
+}</code></pre>
+</figure>
+<div class="check"><strong>Check the fix</strong><p>Let a development CGI exceed the deadline and confirm the client receives 504. While it runs, make a separate static request. After timeout or disconnect, verify the child is reaped and both pipe registrations disappear.</p></div>
+
+</section>
+<section class="lesson" id="keep-alive" aria-labelledby="keep-alive-title">
+  <div class="lesson-head"><span class="step" aria-label="Issue 03">03</span><div><h2 id="keep-alive-title">Connection close and keep-alive</h2><p>Apply the request’s close decision to both successful response paths.</p></div></div>
+  
+<div class="explanation">
+  <div><h3>Problem</h3><p>Ordinary and CGI responses currently choose <code>WRITE</code> even when the request asks for <code>Connection: close</code>. The response sends, then the client returns to <code>READ</code> until it disconnects or times out.</p></div>
+  <div><h3>Solution</h3><p>Match the exact comma-separated <code>close</code> token, ignoring case and surrounding spaces. Before serializing, add the response header and select <code>WRITE_THEN_CLOSE</code>. Use one helper for the static path and for CGI after <code>ft_cgi_finish()</code>. The parsed request is still available when CGI finishes.</p></div>
+</div>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Recognize the close token and arm the socket</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Recognize the close token and arm the socket"><code><span class="tok-keyword">bool</span> sk_wants_close(<span class="tok-keyword">const</span> HttpRequest &amp;request)
+{
+    std::map&lt;std::string, std::string&gt;::const_iterator header =
+        request.headers.find(<span class="tok-string">"connection"</span>);
+    <span class="tok-keyword">if</span> (header == request.headers.end())
+        <span class="tok-keyword">return</span> <span class="tok-keyword">false</span>;
+
+    std::istringstream values(header-&gt;second);
+    std::string token;
+    while (std::getline(values, token, <span class="tok-string">','</span>)) {
+        <span class="tok-keyword">size_t</span> first = token.find_first_not_of(<span class="tok-string">" \t"</span>);
+        <span class="tok-keyword">if</span> (first == std::string::npos)
+            <span class="tok-keyword">continue</span>;
+        <span class="tok-keyword">size_t</span> last = token.find_last_not_of(<span class="tok-string">" \t"</span>);
+        token = token.substr(first, last - first + <span class="tok-constant">1</span>);
+        <span class="tok-keyword">for</span> (<span class="tok-keyword">size_t</span> i = <span class="tok-constant">0</span>; i &lt; token.size(); ++i) {
+            token[i] = std::tolower(<span class="tok-keyword">static_cast</span>&lt;<span class="tok-keyword">unsigned</span> <span class="tok-keyword">char</span>&gt;(token[i]));
+        }
+        <span class="tok-keyword">if</span> (token == <span class="tok-string">"close"</span>)
+            <span class="tok-keyword">return</span> <span class="tok-keyword">true</span>;
+    }
+    <span class="tok-keyword">return</span> <span class="tok-keyword">false</span>;
+}
+
+<span class="tok-keyword">void</span> sk_arm_response(Client &amp;client, pollfd &amp;socket_fd)
+{
+    <span class="tok-keyword">const</span> <span class="tok-keyword">bool</span> close_after_send = sk_wants_close(client.parsed_req);
+    <span class="tok-keyword">if</span> (close_after_send)
+        client.rsp.headers[<span class="tok-string">"Connection"</span>] = <span class="tok-string">"close"</span>;
+
+    HttpResponseBuilder builder;
+    builder.build(client.rsp);
+
+    client.status = close_after_send ? <span class="tok-constant">WRITE_THEN_CLOSE</span> : <span class="tok-constant">WRITE</span>;
+    client.t_out = get_time();
+    socket_fd.events = <span class="tok-constant">POLLOUT</span>;
+}</code></pre>
+</figure>
+<p class="detail">Replace the existing serialization and write-state setup with this helper in both paths. If you also implement the file-length lesson, set <code>client.file_bytes_left</code> to <code>client.rsp.body_size</code> after <code>build()</code> when <code>body_fd</code> is open, and to zero otherwise. The static path already has the socket poll entry. In CGI finalization, call the helper where you find that entry by FD. Keep parser errors on the existing forced-close helper, and keep buffered-request parsing outside the <code>POLLIN</code> check after returning to <code>READ</code>.</p>
+<div class="check"><strong>Check the fix</strong><p>Send a normal request with Connection: Close and look for the close response header and prompt EOF. Repeat with CGI, then verify two ordinary requests can still share one connection.</p></div>
+
+</section>
+<section class="lesson" id="initialization" aria-labelledby="initialization-title">
+  <div class="lesson-head"><span class="step" aria-label="Issue 04">04</span><div><h2 id="initialization-title">Initialize client state</h2><p>Give each new connection well-defined counters, state, and ownership.</p></div></div>
+  
+<div class="explanation">
+  <div><h3>Problem</h3><p><code>add_client()</code> fills many fields before inserting into the map, but other scalar members are still copied uninitialized. The parser also owns a separate <code>HttpRequest</code> whose <code>localPort</code> needs initialization. This is an initialization defect. The prior smoke checks did not show a segfault.</p></div>
+  <div><h3>Solution</h3><p>Initialize defaults where the objects are constructed. Keep <code>-1</code> as the unused descriptor value and keep the constructor list in declaration order. <code>add_client()</code> then sets the accepted socket, addresses, timestamp, and parser body limit.</p></div>
+</div>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Client constructor and parser initializer</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Client constructor and parser initializer"><code><span class="tok-comment">// In client_info, keeping the current declaration order.</span>
+client_info()
+    : fd(-<span class="tok-constant">1</span>), localPort(<span class="tok-constant">0</span>), tw_bytes(<span class="tok-constant">0</span>), tr_bytes(<span class="tok-constant">0</span>),
+      w_bytes(<span class="tok-constant">0</span>), r_bytes(<span class="tok-constant">0</span>), max_size(<span class="tok-constant">0</span>), t_out(<span class="tok-constant">0</span>),
+      parser(), parsed_req(), status(<span class="tok-constant">READ</span>), cgi_rsp(), rsp()
+{
+    rsp.body_fd = -<span class="tok-constant">1</span>;
+}
+
+<span class="tok-comment">// In http.cpp, value-initialize the parser's own request as well.</span>
+HttpParser::HttpParser(<span class="tok-keyword">size_t</span> _max_body_size)
+    : state(REQUEST_LINE), error_code(NO_ERROR), content_length(<span class="tok-constant">0</span>),
+      chunk_size(<span class="tok-constant">0</span>), chunk_received(<span class="tok-constant">0</span>),
+      max_body_size(_max_body_size), request()
+{
+}</code></pre>
+</figure>
+<div class="check"><strong>Check the fix</strong><p>Build with the existing warning flags. Check that a newly constructed client starts in READ, owns no file response or CGI pipe FD, and has zeroed byte counters.</p></div>
+
+</section>
+<section class="lesson" id="listeners" aria-labelledby="listeners-title">
+  <div class="lesson-head"><span class="step" aria-label="Issue 05">05</span><div><h2 id="listeners-title">Listener setup and fatal errors</h2><p>Use the IP already parsed by config and propagate startup failures.</p></div></div>
+  
+<div class="explanation">
+  <div><h3>Problem</h3><p><code>add_listener()</code> stores a parsed <code>uint32_t</code> IPv4 value in a signed <code>int</code>. A valid address with its high bit set can hit the negative check. The loop ignores listener setup failures, and <code>main()</code> discards the loop’s return value.</p></div>
+  <div><h3>Solution</h3><p>Bind using <code>ServerConfig::getIp()</code>. Continue storing <code>getHost()</code> in the listener’s routing metadata. A simple startup policy is to require every configured listener to bind, close any that already opened when one fails, and return a nonzero status.</p></div>
+</div>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Use the parsed address and propagate failure</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Use the parsed address and propagate failure"><code><span class="tok-comment">// In add_listener(), replace the local IP conversion and signed check.</span>
+address.sin_addr.s_addr = htonl(server.getIp());
+
+<span class="tok-comment">// In connection_handler(), while pollfds only contains listeners.</span>
+<span class="tok-keyword">for</span> (<span class="tok-keyword">size_t</span> i = <span class="tok-constant">0</span>; i &lt; servers.size(); ++i) {
+    <span class="tok-keyword">if</span> (add_listener(pollfds, serverfds, servers[i]) &lt; <span class="tok-constant">0</span>) {
+        <span class="tok-keyword">for</span> (<span class="tok-keyword">size_t</span> j = <span class="tok-constant">0</span>; j &lt; pollfds.size(); ++j)
+            close(pollfds[j].fd);
+        <span class="tok-keyword">return</span> <span class="tok-constant">1</span>;
+    }
+}
+
+<span class="tok-comment">// In main(), after constructing Config.</span>
+<span class="tok-keyword">return</span> connection_handler(cfg);</code></pre>
+</figure>
+<p class="detail">Remove the duplicate <code>convert_ip(std::string &amp;)</code> if it has no callers. Ask the config owner to compare duplicate endpoints using <code>getIp()</code> and the port. For a fatal <code>poll()</code> error after startup, close remaining clients and retire their CGI children before returning failure. Once the last listener is lost, stop accepting work and clean up for exit.</p>
+<div class="check"><strong>Check the fix</strong><p>Start with a free configured port, then with that port already occupied. The second startup should report the bind error and return nonzero. Check that ordinary localhost routing still works with the padded IP spelling in default.conf.</p></div>
+
+</section>
+<section class="lesson" id="deadlines" aria-labelledby="deadlines-title">
+  <div class="lesson-head"><span class="step" aria-label="Issue 06">06</span><div><h2 id="deadlines-title">Request deadlines and backpressure</h2><p>Limit request time independently of gaps between reads.</p></div></div>
+  
+<div class="explanation">
+  <div><h3>Problem</h3><p><code>t_out</code> is refreshed by each successful receive. An incomplete request can stay alive as long as bytes keep arriving within the idle window. A listener under descriptor pressure can keep waking <code>poll()</code> when <code>accept()</code> cannot make progress. Synchronous body logging also occupies the event loop.</p></div>
+  <div><h3>Solution</h3><p>Give each request a separate start timestamp. Start it when the first bytes are available, including bytes left over after the previous response. Keep your existing idle timer, and choose a separate overall limit. On descriptor exhaustion, pause the affected listener briefly and keep servicing existing clients. Log request metadata and byte counts.</p></div>
+</div>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Track the first request bytes independently of the idle timer</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Track the first request bytes independently of the idle timer"><code><span class="tok-comment">// In Client, initialize request_started_at to -1.</span>
+<span class="tok-comment">// Use the same time source for both timestamps.</span>
+<span class="tok-keyword">const</span> <span class="tok-keyword">double</span> request_timeout_ms = <span class="tok-constant">10000</span>; <span class="tok-comment">// Example limit.</span>
+
+<span class="tok-comment">// In READ, after recv() and just before parser.parse().</span>
+<span class="tok-keyword">const</span> <span class="tok-keyword">double</span> now = get_time();
+<span class="tok-keyword">if</span> (crnt_client.request_started_at &lt; <span class="tok-constant">0</span>
+    &amp;&amp; !crnt_client.request_buffer.empty()) {
+    crnt_client.request_started_at = now;
+}
+<span class="tok-keyword">if</span> (crnt_client.request_started_at &gt;= <span class="tok-constant">0</span>
+    &amp;&amp; now - crnt_client.request_started_at &gt;= request_timeout_ms) {
+    clients_to_close.insert(crnt_client.fd);
+    <span class="tok-keyword">continue</span>;
+}
+
+<span class="tok-comment">// When the response completes and the parser resets.</span>
+crnt_client.request_started_at = -<span class="tok-constant">1</span>;</code></pre>
+</figure>
+<figure class="snippet">
+  <figcaption><span><span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Back off an exhausted listener without sleeping the event loop</span><button class="copy" type="button" data-copy hidden>Copy code</button></figcaption>
+  <pre tabindex="0" aria-label="Back off an exhausted listener without sleeping the event loop"><code><span class="tok-comment">// After accept() reports descriptor exhaustion.</span>
+<span class="tok-comment">// accept_retry_at is a listener timestamp initialized to zero.</span>
+server.accept_retry_at = get_time() + <span class="tok-constant">250</span>;
+listener_pollfd.events = <span class="tok-constant">0</span>;
+
+<span class="tok-comment">// Before each poll() call, for each paused listener.</span>
+<span class="tok-keyword">if</span> (server.accept_retry_at &gt; <span class="tok-constant">0</span>
+    &amp;&amp; get_time() &gt;= server.accept_retry_at) {
+    server.accept_retry_at = <span class="tok-constant">0</span>;
+    listener_pollfd.events = <span class="tok-constant">POLLIN</span>;
+}</code></pre>
+</figure>
+<p class="detail">Have <code>add_client()</code> report descriptor exhaustion by checking <code>EMFILE</code> and <code>ENFILE</code> immediately after a failed <code>accept()</code>. In listener dispatch use the current <code>pollfds[i]</code> after a failure. A successful accept may append to the vector, so acquire a fresh index before accessing it again. Before the next <code>poll()</code>, find each paused listener by <code>server.fd</code> to rearm it.</p>
+<p class="detail">Check the request deadline on passes without socket readiness as well. The 10-second example applies to receiving and parsing. CGI and sending have separate timers. If your subject permits a monotonic time source, use it so clock corrections cannot move a deadline. When handling allocation failures, roll back the map insertion and close the new FD if its poll entry could not be added.</p>
+<div class="check"><strong>Check the fix</strong><p>Use a test client that sends a request in several slow pieces. A second client should still receive responses. Check that the first request hits its overall deadline even when no individual pause exceeds the idle timeout.</p></div>
+
+</section>
+
+      <footer class="footer">
+        <p>Serve from the repository root with <code>./sr default.conf</code>.</p>
+        <a href="#main">Back to top</a>
+      </footer>
+    </main>
+  </div>
+  <div class="sr-only" id="copy-status" role="status"></div>
+</body>
+</html>

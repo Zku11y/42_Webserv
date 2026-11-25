@@ -1,6 +1,7 @@
 #include "../../inc/main.hpp"
 #include "../../inc/core/server.hpp"
 #include "../../inc/Execution/Execution.hpp"
+#include <csignal>
 #include <netinet/in.h>
 
 // TODO: any push back and other functions that allocate need to be checked so that they
@@ -143,13 +144,14 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client
     return ;
   }
 
-  Client new_client ;
+  Client new_client;
   new_client.client_ip = bytes_to_string(client_addr); 
   new_client.fd = new_fd;
   new_client.r_bytes = 0;
   new_client.w_bytes = 0;
   new_client.tr_bytes = 0;
   new_client.tw_bytes = 0;
+  new_client.fd_bytes_left = 0;
   new_client.localHost = server.ip;
   new_client.localPort = server.port;
   new_client.t_out = get_time();
@@ -410,6 +412,7 @@ int connection_handler(Config &cfg){
     }
     
     std::set<int> clients_to_close;
+    std::set<int> cgi_pipe_errors;
     for(size_t i = pollfds.size(); i > 0;){
       i--;
       
@@ -446,11 +449,11 @@ int connection_handler(Config &cfg){
       if(f != pipes.end()){
         int client_fd = f->second.client.fd;
 
-        if(clients_to_close.count(client_fd))
+        if(clients_to_close.count(client_fd) || cgi_pipe_errors.count(client_fd))
           continue;
 
         if(!sk_handle_pipes(f->second, pipes, i, pollfds))
-          clients_to_close.insert(client_fd);
+          cgi_pipe_errors.insert(client_fd);
 
         continue;
       }
@@ -466,14 +469,13 @@ int connection_handler(Config &cfg){
       }
           
       Client &crnt_client = found->second;
-      double timeout = crnt_client.status == WAIT ? CGI_T_OUT : T_OUT;
 
       if(clients_to_close.count(crnt_client.fd))
         continue;
 
       if(pollfds[i].revents & (POLLERR | POLLNVAL)
         || ((pollfds[i].revents & POLLHUP) && !(pollfds[i].revents & (POLLIN | POLLOUT)))
-        || (get_time() - crnt_client.t_out) > timeout){
+        || (crnt_client.status != WAIT && get_time() - crnt_client.t_out > T_OUT)){
 
         clients_to_close.insert(crnt_client.fd);
         continue;
@@ -547,14 +549,26 @@ int connection_handler(Config &cfg){
           }
         
           crnt_client.r_bytes = 0;
-          crnt_client.status = WRITE; 
+
+          std::map<std::string, std::string>::const_iterator connection =
+              crnt_client.parsed_req.headers.find("connection");
+
+          if (connection != crnt_client.parsed_req.headers.end() && connection->second == "close") {
+              crnt_client.status = WRITE_THEN_CLOSE;
+              crnt_client.rsp.headers["Connection"] = "close";
+          } else {
+              crnt_client.status = WRITE;
+          }
+
+          // crnt_client.status = WRITE; 
           pollfds[i].events = POLLOUT;
           crnt_client.t_out = get_time();
           ft_log_response(crnt_client.rsp);
 
           HttpResponseBuilder builder;
           builder.build(crnt_client.rsp);
-
+          if(crnt_client.rsp.body_fd != -1)
+            crnt_client.fd_bytes_left = crnt_client.rsp.body_size;
         }
 
         else if(reached_eof){
@@ -579,21 +593,19 @@ int connection_handler(Config &cfg){
 //          std::cout << "ITS USING THE BODY_FD FINALLYYYYYYYYY\n";
   
           char buff[W_BUFF_SIZE];
-          if(crnt_client.response_buffer.empty()){
-            ssize_t red = read(crnt_client.rsp.body_fd, buff, sizeof(buff));
+          if(crnt_client.response_buffer.empty() && crnt_client.fd_bytes_left > 0){
+            ssize_t amount = crnt_client.fd_bytes_left < W_BUFF_SIZE ? crnt_client.fd_bytes_left : W_BUFF_SIZE;
+            ssize_t red = read(crnt_client.rsp.body_fd, buff, amount);
 
             if(red > 0){
               crnt_client.response_buffer.append(buff, red);
+              crnt_client.fd_bytes_left -= red;
             }
-            if(red == 0){
-              close(crnt_client.rsp.body_fd); // should i close this fd or do the other's code close it?
-              crnt_client.rsp.body_fd = -1;
-            }
-            if(red < 0){
+            if(red <= 0){
               clients_to_close.insert(crnt_client.fd);
               continue;
             }
-
+            
           }
           
           if(!crnt_client.response_buffer.empty()){
@@ -610,8 +622,11 @@ int connection_handler(Config &cfg){
               continue;
             } 
           }
-        
-          continue;
+          if(crnt_client.fd_bytes_left > 0 || !crnt_client.response_buffer.empty())
+            continue;
+
+          close(crnt_client.rsp.body_fd);
+          crnt_client.rsp.body_fd = -1;
         }
 
         if(crnt_client.tw_bytes < crnt_client.rsp.responc.size()){
@@ -661,11 +676,40 @@ int connection_handler(Config &cfg){
     {
         Client &client = it->second;
 
-        if (client.status != WAIT
-            || clients_to_close.count(client.fd))
+        if (client.status != WAIT || clients_to_close.count(client.fd)){
             continue;
+        }
 
         CgiState &cgi = client.cgi_rsp;
+
+        int error_code = 0;
+        if(cgi_pipe_errors.count(client.fd))
+          error_code = 502;
+        else if(get_time() - client.t_out > CGI_T_OUT)
+          error_code = 504;
+
+        if(error_code != 0){
+          sk_close_pipe(cgi.stdin_write_fd, pipes, pollfds);
+          sk_close_pipe(cgi.stdout_read_fd, pipes, pollfds);
+
+          if(cgi.pid > 0 && !cgi.child_reaped) {
+            kill(cgi.pid, SIGKILL);
+            retired_pids.push_back(cgi.pid);
+          }
+          cgi.pid = -1;
+
+          size_t i = 0;
+          while(i < pollfds.size() && pollfds[i].fd != client.fd){
+            i++;
+          }
+
+          if(i != pollfds.size())
+            sk_generate_error(client, pollfds, i, error_code);
+          else
+            clients_to_close.insert(client.fd);
+
+          continue;
+        }
 
         if (!cgi.child_reaped) {
             int status = 0;

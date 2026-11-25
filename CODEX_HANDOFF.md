@@ -2,7 +2,13 @@
 
 I'm working on 42 Webserv v24.1 with two teammates. I own the connection handling and poll loop in [src/core/server.cpp](src/core/server.cpp) and [inc/core/server.hpp](inc/core/server.hpp). My teammates own configuration and HTTP parsing/serialization, and resource execution and CGI.
 
-Start by reading those two server files and checking `git status`, `git diff`, and recent commits. Check the latest source against the snapshot below. I write the implementation myself. When I ask for a review, explain what works, identify the bugs in priority order, and use small C++98 snippets where useful. Wait for an explicit request before editing project code. Keep the design simple, reuse the existing helpers and `CgiState` fields, and avoid adding an `io_failed` flag. I handle commits and pushes.
+I want to get the project ready for validation. Work through one issue at a time in chat. Explain what happens in my code in plain language, point to the relevant block, and show a small C++98 change when useful. Reuse the existing helpers and keep the design simple. I write the implementation myself and handle commits and pushes. Wait for explicit permission before editing project code. I gave one-time permission for the `cgi_pipe_errors` change. Use this file to resume the walkthrough. The earlier `www/poll-loop/` guide is a stale snapshot.
+
+## Starting from another checkout
+
+This snapshot was taken on 2026-11-25. At that point `main` and the local `origin/main` ref both pointed to `4e08c24`. The changes since then were in the working tree, chiefly [server.cpp](src/core/server.cpp), [server.hpp](inc/core/server.hpp), and [response.cpp](src/http/response.cpp). Bring those edits and this handoff to the other machine. A clone of the last commit alone will be missing them. The untracked `sr` is a generated binary. Build a fresh one on the machine you use.
+
+Start with `git status --short --branch`, `git diff`, and `git log -5 --oneline`. Read the two core files and check the current code against this snapshot. From the repository root, the default run command is `make && ./sr default.conf`. The executable requires the config path as its argument.
 
 ## Subject constraints
 
@@ -11,23 +17,24 @@ Start by reading those two server files and checking `git status`, `git diff`, a
 - Handle I/O return values without inspecting `errno` after a read or write operation. The subject lists `signal()` and `waitpid()`. Follow the subject's external function list and its macOS-specific `fcntl()` restrictions if applicable.
 - Requests need a finite deadline. The server must handle client disconnection and stay available.
 
-## CGI design we're working toward
+## Current behavior and checks
 
-1. `Execution::ft_handle_resource()` can start CGI. The startup code in [Exec_Cgi.cpp](src/Execution/Exec_Cgi.cpp) saves the child PID and parent pipe FDs in `client.cgi_rsp`, then sets the client to `WAIT`.
-2. On entry to `WAIT`, pause ordinary socket I/O with `events = 0` and register the CGI pipes once. The pipe map is keyed by pipe FD. Each `CgiPipe` stores the direction and a reference to the `Client` in the client map.
-3. Dispatch listeners first, CGI pipe entries second, and ordinary client sockets last. On stdin `POLLOUT`, write from `parsed_req.body` at `body_offset`. Close stdin after the final byte or immediately for an empty body. Independently, read stdout on `POLLIN` or `POLLHUP`, append exactly the bytes read to `raw_output`, and mark `stdout_eof` when the read returns zero.
-4. Check `waitpid(..., WNOHANG)` after poll passes, including passes with no events. Track child exit separately from stdout EOF. After both are known and the child exited successfully, hand the output to the CGI finalizer. Then build the HTTP response and arm client socket `POLLOUT`.
-5. Process one request per client at a time. Other clients can run CGI concurrently. After sending a keep-alive response, reset the parser and process leftover `request_buffer` bytes even if the socket has no new `POLLIN`. Before reusing `CgiState` or erasing a client, retire both pipe entries and make sure the child has been reaped or its PID is retained for reaping.
+- The current source builds with the subject warning flags. The latest localhost check fetched a 273-byte HTML file and a 793,762-byte JavaScript file byte for byte over one connection. The second request sent lowercase `Connection: close`, and the response included that header.
+- The file body is read only by the poll loop. `fd_bytes_left` starts at `rsp.body_size` and counts bytes still to read. `response_buffer` holds bytes still to send. A failed read or early EOF queues socket cleanup. When the count and buffer are both empty, the poll loop closes `body_fd` and reaches normal response completion.
+- In `READ`, `recv() == 0` still lets the parser process buffered bytes. EOF with no pending request queues cleanup. A truncated request builds a `400` using `WRITE_THEN_CLOSE`. Both write states can send.
+- For CGI, the socket waits with ordinary events disabled. The loop handles both pipes, then checks `waitpid(..., WNOHANG)` and stdout EOF separately. Normal completion needs both. Before erasing a client or writing a CGI error, unregister the pipes and keep any unreaped child in `retired_pids`. The later sweep calls `waitpid()` to finish cleanup.
+- The last CGI localhost checks returned `200` for normal CGI, `502` for output over the cap, and `504` for a script that ran past five seconds. `cgi_pipe_errors` is a set of client FDs for the current poll pass. It lets the `WAIT` loop use the timeout cleanup for pipe errors after the indexed scan ends. Find the socket's poll index after removing the pipes.
+- CGI already exports `REMOTE_ADDR` from the IP captured by `accept()`. The CGI finalizer also has a separate 16 KiB header cap and checks for the earliest header terminator. [Exec_Cgi.cpp](src/Execution/Exec_Cgi.cpp)
 
-## Last verified checkpoint
+## Next steps in my part
 
-At this handoff, the latest work was a working-tree change to `src/core/server.cpp` on top of `c8366c5`. Recheck the current checkout before treating these findings as open.
+1. **Finish `Connection: close`.** The ordinary response path after the CGI `WAIT` branch currently handles the literal lowercase value `close`. Extend the check to a case-insensitive comma-separated token and reuse it before building a successful CGI response. The request header map uses lowercase keys and preserves the value's case. Use `WRITE_THEN_CLOSE` and set the response header before `builder.build()`. Check ordinary replies, CGI replies, and two requests on a keep-alive socket.
+2. **Finish CGI error handling.** `sk_add_pipes()` failure and unexpected `waitpid()` failure still close the socket. If it is still live, route them through the existing CGI cleanup and error response. Keep the `EINTR` retry and `ECHILD` handling. Move the output-cap check before appending a new chunk.
+3. **Initialize defaults and fix startup errors.** Some `Client`, nested parser request, and response scalars are copied before initialization. Initialize them at construction, using `-1` for an unused FD. Change `fd_bytes_left` to `size_t` to match `rsp.body_size`. For listeners, use the unsigned IP from `ServerConfig::getIp()` and make startup report failure when it cannot listen. Propagate the connection loop's return status from `main()`.
+4. **Check deadlines and cleanup.** The 500 ms socket timer is an idle timer that resets on successful reads. Add a separate receive deadline if needed for the subject. Before submission, check slow and concurrent clients, disconnects during CGI, descriptor exhaustion, and repeated CGI cleanup for FD leaks and zombies. Full request-body debug logging is worth trimming for these runs.
 
-- The full project compiled and linked with the C++98 warning flags. Isolated pipe tests passed for empty-body registration, binary stdout capture, removing stdout from both containers at EOF, and setting `stdout_eof`. CGI was not verified end to end.
-- The pipe handler closes and unregisters the current pipe directly. This works with the reverse poll loop because marking the entry as `CGI` prevents the caller from using that index as a client socket after erasure.
-- `sk_setup_fd()` still reports success if `set_non_blocking()` fails. Both nonblocking setup and close-on-exec setup need to succeed.
-- The CGI dispatch still ignores `sk_handle_pipes()` returning `false`. Use the existing return value for failure cleanup. A stdin entry with no ready events is normal, and `POLLNVAL` should be checked with a bitmask.
-- The existing client timeout or disconnect path can erase a `WAIT` client while CGI pipe entries still reference it. Setup failure also needs to close the owned FDs and account for the child. CGI timeout handling, `SIGPIPE` handling, and nonblocking child reaping are still pending.
-- Coordinate CGI response finalization with the execution teammate. The declared `ft_cgi_parent(Client&)` had no implementation at this checkpoint. If using `502` and `504`, coordinate adding them to the response builder's status table.
+## Remaining teammate work
 
-When I ask to continue, use the latest code and start with the smallest relevant review or implementation step. Explain how the change affects the poll loop and FD ownership.
+- **HTTP and config.** The response builder rewrites codes missing from its reason-phrase table to `500`. This includes `409`, `415`, and CGI `202`. Parser limits for request lines, headers and chunk metadata, and support for `Expect: 100-continue`, are still open. `logtime.conf` uses `server_name`, which the config parser currently rejects. Duplicate listener validation compares host strings. Use a numeric endpoint comparison if padded IPv4 spellings must be treated alike. [response.cpp](src/http/response.cpp) · [http.cpp](src/http/http.cpp) · [config.cpp](src/http/config.cpp) · [configParser.cpp](src/http/configParser.cpp)
+- **Resource execution and CGI.** Coordinate close-on-exec for file-backed responses, escaping and URL encoding for autoindex and redirects, consistent upload mapping when `upload_store` differs from `root`, and CGI/static/writable directory boundaries. Repeated CGI `Set-Cookie` headers still collapse to one map entry if cookie support is in scope. [Exec_Rsp.cpp](src/Execution/Exec_Rsp.cpp) · [Exec_Cgi.cpp](src/Execution/Exec_Cgi.cpp)
+- **Different machines.** The default `/projects` route uses a machine-specific absolute root, and the common header includes a glibc-specific header. Check both when moving the project, especially for a macOS build. [default.conf](default.conf) · [main.hpp](inc/main.hpp)

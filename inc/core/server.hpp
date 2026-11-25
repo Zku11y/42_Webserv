@@ -14,7 +14,6 @@
 #define CGI_T_OUT 5000
 #define W_BUFF_SIZE 24096
 #define R_BUFF_SIZE 24096
-
 #define MAX_CGI_HEADERS (16 * 1024)
 #define MAX_CGI_OUTPUT  (20 * 1024 * 1024)
 
@@ -41,6 +40,7 @@ struct CgiState
     std::string raw_output;
 
     bool stdout_eof;
+    bool pipe_failed;
     bool child_reaped;
     int child_exit_status;
 
@@ -50,6 +50,7 @@ struct CgiState
           stdout_read_fd(-1),
           body_offset(0),
           stdout_eof(false),
+          pipe_failed(false),
           child_reaped(false),
           child_exit_status(0)
     {}
@@ -61,6 +62,9 @@ typedef struct server_info{
   std::string ip;
   size_t max_size;
 } sk_server;
+
+
+
 
 typedef struct client_info{
   
@@ -78,24 +82,43 @@ typedef struct client_info{
   size_t max_size;
   
   double t_out;
-
+  
+  
   std::string request_buffer;
 
-    HttpParser parser;
-    HttpRequest parsed_req;
+  HttpParser parser;
+  HttpRequest parsed_req;
 
-    states status;
-    CgiState cgi_rsp;
+  states status;
+  CgiState cgi_rsp;
     
-    HttpResponse rsp;
+  HttpResponse rsp;
 
   std::string response_buffer;
 
   std::string client_ip;
+
   ssize_t fd_bytes_left;
 
-  client_info() : parser(),cgi_rsp(){}
-  
+  client_info()
+      : fd(-1),
+        localPort(0),
+        tw_bytes(0),
+        tr_bytes(0),
+        w_bytes(0),
+        r_bytes(0),
+        max_size(0),
+        t_out(0.0),
+        parser(),
+        parsed_req(),
+        status(READ),
+        cgi_rsp(),
+        rsp(),
+        fd_bytes_left(0)
+  {
+      rsp.body_fd = -1;
+  }
+    
 } Client;
 
 enum pipe_type{

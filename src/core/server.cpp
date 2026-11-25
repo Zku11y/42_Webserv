@@ -1,6 +1,8 @@
 #include "../../inc/main.hpp"
 #include "../../inc/core/server.hpp"
 #include "../../inc/Execution/Execution.hpp"
+#include <csignal>
+#include <netinet/in.h>
 
 // TODO: any push back and other functions that allocate need to be checked so that they
 //         don't throw and end the whole program
@@ -217,7 +219,7 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
   std::string ip = server.getHost();
   int port = server.getPort();
 
-  int host = convert_ip(ip);
+  ssize_t host = convert_ip(ip);
 
  if (host < 0) {
       close(listenFd);
@@ -369,7 +371,7 @@ void sk_generate_error(Client &crnt_client, std::vector<pollfd> &pollfds, int i,
   ft_log_request(crnt_client.parsed_req);
   ft_handle_error_3(crnt_client, error_code);
   ft_log_response(crnt_client.rsp);
-  crnt_client.rsp.headers["Connection"] = "close";
+  // crnt_client.rsp.headers["Connection"] = "close";
   HttpResponseBuilder builder;
   builder.build(crnt_client.rsp);
 
@@ -410,7 +412,6 @@ int connection_handler(Config &cfg){
     }
     
     std::set<int> clients_to_close;
-    std::set<int> cgi_pipe_errors;
     for(size_t i = pollfds.size(); i > 0;){
       i--;
       
@@ -447,11 +448,11 @@ int connection_handler(Config &cfg){
       if(f != pipes.end()){
         int client_fd = f->second.client.fd;
 
-        if(clients_to_close.count(client_fd) || cgi_pipe_errors.count(client_fd))
+        if(clients_to_close.count(client_fd) || f->second.client.cgi_rsp.pipe_failed)
           continue;
 
         if(!sk_handle_pipes(f->second, pipes, i, pollfds))
-          cgi_pipe_errors.insert(client_fd);
+          f->second.client.cgi_rsp.pipe_failed = true;
 
         continue;
       }
@@ -548,17 +549,17 @@ int connection_handler(Config &cfg){
         
           crnt_client.r_bytes = 0;
 
-          std::map<std::string, std::string>::const_iterator connection =
-              crnt_client.parsed_req.headers.find("connection");
+          // std::map<std::string, std::string>::const_iterator connection =
+          //     crnt_client.parsed_req.headers.find("connection");
 
-          if (connection != crnt_client.parsed_req.headers.end() && connection->second == "close") {
-              crnt_client.status = WRITE_THEN_CLOSE;
-              crnt_client.rsp.headers["Connection"] = "close";
-          } else {
-              crnt_client.status = WRITE;
-          }
+          // if (connection != crnt_client.parsed_req.headers.end() && connection->second == "close") {
+          //     crnt_client.status = WRITE_THEN_CLOSE;
+          //     crnt_client.rsp.headers["Connection"] = "close";
+          // } else {
+          //     crnt_client.status = WRITE;
+          // }
 
-          // crnt_client.status = WRITE; 
+          crnt_client.status = WRITE; 
           pollfds[i].events = POLLOUT;
           crnt_client.t_out = get_time();
           ft_log_response(crnt_client.rsp);
@@ -681,7 +682,7 @@ int connection_handler(Config &cfg){
         CgiState &cgi = client.cgi_rsp;
 
         int error_code = 0;
-        if(cgi_pipe_errors.count(client.fd))
+        if(cgi.pipe_failed)
           error_code = 502;
         else if(get_time() - client.t_out > CGI_T_OUT)
           error_code = 504;

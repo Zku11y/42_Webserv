@@ -1,81 +1,129 @@
-1. TODO — Remaining tasks before final submission
-Excluding the actual CGI implementation for now.
+Here is our updated Dev 3 TODO list, based on your latest Exec_Rsp.cpp, completed CGI implementation, and both Dev 2 parser audits.
 
-Configuration and architecture
-- [ ] Confirm root-style vs alias-style path resolution.
-- [ ] Confirm _uploadStore mapping convention.
-- [ ] Resolve GET, POST and DELETE resource mapping consistency.
-- [ ] Confirm nonempty _root validation with Dev 2.
-- [ ] Confirm nonempty _uploadStore validation with Dev 2.
-- [ ] Confirm configured filesystem path validation.
-- [ ] Confirm location path validation and duplicate-location rejection.
-- [ ] Confirm index filename validation.
-- [ ] Confirm redirect status and target validation.
-- [ ] Resolve index selection bypassing more-specific locations.
-- [ ] Prevent CGI source disclosure through index selection.
-- [ ] Prevent overlapping upload and CGI execution directories.
+I've removed the parser validation tasks that are already confirmed and excluded fixes belonging to Dev 2. We'll only address parser limitations where they directly affect our RSP implementation.
+Updated TODO — Dev 3
 
-URL encoding and HTML escaping
+Phase 1 — Path resolution
+- [ ] Implement subject-compliant location-prefix removal.
+- [ ] Update ft_resolve_full_path_1().
+- [ ] Update ft_resolve_full_path_2().
+- [ ] Handle root location /.
+- [ ] Handle exact location matches.
+- [ ] Handle locations ending with /.
+- [ ] Handle configured roots ending with /.
+- [ ] Handle absolute and relative configured filesystem paths.
+- [ ] Define _uploadStore mapping convention.
+- [ ] Ensure GET, POST and DELETE mapping consistency.
+- [ ] Handle different _root and _uploadStore directories.
+- [ ] Ensure rootless redirect locations work correctly.
+- [ ] Test all path-construction edge cases.
+Phase 2 — URL encoding and HTML escaping
 - [ ] Implement ft_url_encode().
 - [ ] Implement ft_html_escape().
-- [ ] Apply URL encoding to autoindex links.
-- [ ] Apply HTML escaping to autoindex filenames.
-- [ ] Apply HTML escaping to autoindex headings.
-- [ ] Apply URL encoding to automatic directory redirects.
-- [ ] Apply URL encoding to POST Location header.
-- [ ] Resolve POST Location header correctness with different upload storage.
-- [ ] Confirm percent decoding exactly once with Dev 2.
-- [ ] Confirm encoded slash handling.
-- [ ] Handle encoded trailing-slash redirection.
-- [ ] Prevent HTTP header injection.
-- [ ] Confirm query string preservation.
-
-Security and filesystem
-- [ ] Final review of symbolic link handling.
-- [ ] Review hard link limitations.
-- [ ] Review filesystem race conditions (TOCTOU).
-- [ ] Review intermediate directory permission limitations.
-- [ ] Review filesystem filename and path length limits.
-- [ ] Review large autoindex memory consumption.
-- [ ] Review request body copying and memory consumption.
-- [ ] Implement FD close-on-exec policy before CGI.
+- [ ] Encode autoindex links.
+- [ ] Escape autoindex filenames.
+- [ ] Escape autoindex headings.
+- [ ] Encode automatic directory redirects.
+- [ ] Encode POST Location header.
+- [ ] Ensure POST Location identifies the created resource.
+- [ ] Verify encoded slash (%2F) behavior.
+- [ ] Handle encoded trailing slashes.
+- [ ] Preserve the original encoded query in directory redirects.
+- [ ] Prevent HTTP header injection in generated redirects.
+- [ ] Protect against malformed configured redirect targets.
+- [ ] Test all encoding and escaping edge cases.
+Phase 3 — Index and CGI resource security
+- [ ] Review ft_init_cgi_var().
+- [ ] Review ft_handle_G_dir().
+- [ ] Resolve index selection bypassing more-specific locations.
+- [ ] Prevent CGI source disclosure through index selection.
 - [ ] Prevent unintended CGI source serving through static locations.
-
-Minor corrections and improvements
-- [ ] Move autoindex ELOOP error mapping from 404 to 403.
+- [ ] Prevent untrusted uploads from becoming executable CGI scripts.
+- [ ] Review overlapping filesystem directories between locations.
+- [ ] Verify CGI SCRIPT_NAME after changing path resolution.
+Phase 4 — Filesystem security
+- [ ] Review ft_handle_path() line by line.
+- [ ] Reject embedded NULL bytes in complete filesystem paths.
+- [ ] Review configured filesystem dot segments.
+- [ ] Review symbolic-link handling.
+- [ ] Review hard-link limitations.
+- [ ] Review filesystem race conditions (TOCTOU).
+- [ ] Review consistency between stat() and opened file descriptors.
+- [ ] Review intermediate directory permissions.
+- [ ] Review filesystem filename and path-length limits.
 - [ ] Review ENAMETOOLONG error mapping.
-- [ ] Add fd = -1 after failed-write cleanup.
-- [ ] Replace numeric filesystem validation modes with an enum (optional).
-- [ ] Centralize duplicated filesystem errno mapping (optional).
-- [ ] Improve default error page messages.
+- [ ] Implement FD_CLOEXEC policy for opened files.
+- [ ] Review large autoindex memory consumption.
+- [ ] Review request-body copying and memory consumption.
+Phase 5 — Final resource-handler review
+- [ ] Review Execution() constructor.
+- [ ] Review ft_handle_resource().
+- [ ] Review ft_select_server().
+- [ ] Review ft_validate_path().
+- [ ] Review ft_select_location().
+- [ ] Review ft_validate_methods().
+- [ ] Review ft_handle_Get().
+- [ ] Review ft_handle_G_files().
+- [ ] Review ft_handle_G_autoindex().
+- [ ] Review ft_handle_Post().
+- [ ] Review ft_handle_Delete().
+- [ ] Review ft_handle_Redirect().
+- [ ] Review ft_handle_Redirect_2().
+- [ ] Review all remaining helper functions.
+- [ ] Verify cleanup in every failure branch.
+Phase 6 — Error handling
+- [ ] Clear rsp.responc in Execution constructor.
+- [ ] Review ft_handle_error().
+- [ ] Review ft_error_1() and custom error-page fallback.
+- [ ] Simplify ft_error_2().
+- [ ] Simplify ft_handle_error_2() using the shared error handler where appropriate.
+- [ ] Reuse ft_msg() where appropriate.
+- [ ] Verify all HTTP error codes.
+- [ ] Verify all filesystem errno mappings.
+- [ ] Verify the Allow header for 405.
+- [ ] Verify bodyless response framing with the response builder.
+Phase 7 — Optional cleanup and improvements
+- [ ] Replace numeric filesystem modes with an enum.
+- [ ] Centralize duplicated filesystem error mappings.
+- [ ] Simplify code using C++98 standard library functions where appropriate.
+- [ ] Remove redundant validations.
+- [ ] Expand MIME types if needed.
+- [ ] Improve default error-page messages.
 - [ ] Design custom error pages.
 - [ ] Improve autoindex HTML and CSS.
-- [ ] Expand MIME types if needed.
-- [ ] Clean unnecessary comments and debug output.
-
-Integration with Dev 1 and Dev 2
-- [ ] Confirm response FD initialization and ownership.
-- [ ] Confirm FD cleanup on client disconnection.
-- [ ] Confirm local IP and port selection.
-- [ ] Confirm maximum request body size enforcement.
-- [ ] Confirm maximum URI length enforcement.
-- [ ] Confirm Content-Length and Transfer-Encoding validation.
-- [ ] Confirm chunked request decoding.
-- [ ] Confirm no Content-Length header for 204 responses.
-- [ ] Confirm no response body for HEAD requests.
-- [ ] Confirm large-file Content-Length conversion.
-- [ ] Confirm handling of files changing size during transmission.
-- [ ] Confirm response header serialization and validation.
-- [ ] Confirm CGI integration with the single poll loop.
-
-Final testing
-- [ ] Complete CGI implementation.
+- [ ] Remove unnecessary comments.
+- [ ] Remove unnecessary debug output.
+Phase 8 — Postponed CGI tasks
+- [x] Implement core CGI execution.
+- [x] Implement CGI environment construction.
+- [x] Implement CGI argument construction.
+- [x] Implement CGI pipe creation.
+- [x] Implement CGI child execution.
+- [x] Implement CGI response parsing.
+- [x] Implement general fallback error handler.
+- [ ] Resolve PATH_INFO.
+- [ ] Review official CGI tester compatibility.
+- [ ] Review internal CGI redirects.
+- [ ] Review dynamic CGI Connection header filtering.
+- [ ] Confirm CGI output memory cleanup on failure with Dev 1.
+- [ ] Confirm CGI output limits during pipe reads with Dev 1.
+- [ ] Confirm CGI timeout handling with Dev 1.
+Phase 9 — Final testing
+- [ ] Test all GET normal cases.
+- [ ] Test all GET edge cases.
+- [ ] Test all POST normal cases.
+- [ ] Test all POST edge cases.
+- [ ] Test all DELETE normal cases.
+- [ ] Test all DELETE edge cases.
+- [ ] Test all CGI normal cases.
 - [ ] Test all CGI edge cases.
-- [ ] Retest all GET edge cases.
-- [ ] Retest all POST edge cases.
-- [ ] Retest all DELETE edge cases.
 - [ ] Test URL encoding and decoding.
+- [ ] Test directory traversal protection.
 - [ ] Test HTML injection protection.
+- [ ] Test HTTP header injection protection.
+- [ ] Test symbolic links.
+- [ ] Test filesystem permissions.
+- [ ] Test custom error pages.
 - [ ] Test multiple servers and ports.
 - [ ] Test multiple simultaneous clients.
 - [ ] Test client disconnections.
@@ -86,8 +134,9 @@ Final testing
 - [ ] Test FD exhaustion.
 - [ ] Test memory leaks.
 - [ ] Test FD leaks.
-- [ ] Test zombie process leaks after CGI.
+- [ ] Test CGI zombie process leaks.
 - [ ] Perform stress testing.
 - [ ] Perform browser compatibility testing.
+- [ ] Perform official tester testing.
 - [ ] Perform final subject compliance review.
 - [ ] Perform final evaluation simulation.

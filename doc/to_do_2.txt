@@ -1,0 +1,26 @@
+Postponed features: PATH_INFO, internal redirects and dynamic Connection header filtering. The full-server timeout, output limits during pipe reads and descriptor inheritance still need integration verification with Dev 1.
+
+
+
+--------
+
+update this 
+"
+HttpResponseBuilder::HttpResponseBuilder() {
+	status_message[200] = "OK";
+	status_message[201] = "Created";
+	status_message[204] = "No Content";
+	status_message[301] = "Moved Permanently";
+	status_message[302] = "Found";
+	status_message[400] = "Bad Request";
+	status_message[403] = "Forbidden";
+	status_message[404] = "Not Found";
+	status_message[405] = "Method Not Allowed";
+	status_message[413] = "Content Too Large";
+	status_message[500] = "Internal Server Error";
+	status_message[501] = "Not Implemented";
+	status_message[502] = "Bad Gateway";
+	status_message[504] = "Gateway Timeout";
+	status_message[505] = "HTTP Version Not Supported";
+}
+"

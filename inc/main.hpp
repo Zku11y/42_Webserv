@@ -13,6 +13,7 @@
 #include <limits>
 #include <exception>
 #include <algorithm>
+#include <csignal>
 #include <utility>
 #include <cstddef>
 #include <unistd.h>

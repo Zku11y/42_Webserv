@@ -6,6 +6,8 @@ struct HttpResponse
 {
 	int									status_code;
 	std::map<std::string, std::string>	headers;
+    std::vector<std::string> set_cookies;
+
 	std::string							body;
 
 	int									body_fd;

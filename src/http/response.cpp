@@ -119,6 +119,7 @@ void HttpResponseBuilder::build(HttpResponse& response)
 {
 	std::stringstream   ss;
 	std::map<std::string, std::string>::const_iterator  it;
+	// const size_t MAX_INLINE_BODY = 1024;
 
 	ss.imbue(std::locale::classic());
 	if (status_message.find(response.status_code) == status_message.end())
@@ -159,4 +160,6 @@ void HttpResponseBuilder::build(HttpResponse& response)
 	response.responc += "\r\n";
 	if (response.body_fd == -1)
 		response.responc += response.body;
+	// else if (response.body_size <= MAX_INLINE_BODY)
+	// 	response.responc += read_body_fd(response.body_fd, MAX_INLINE_BODY);
 }

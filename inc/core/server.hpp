@@ -14,6 +14,7 @@
 #define CGI_T_OUT 5000
 #define W_BUFF_SIZE 24096
 #define R_BUFF_SIZE 24096
+
 #define MAX_CGI_HEADERS (16 * 1024)
 #define MAX_CGI_OUTPUT  (20 * 1024 * 1024)
 
@@ -77,22 +78,20 @@ typedef struct client_info{
   size_t max_size;
   
   double t_out;
-  
-  
+
   std::string request_buffer;
 
-  HttpParser parser;
-  HttpRequest parsed_req;
+    HttpParser parser;
+    HttpRequest parsed_req;
 
-  states status;
-  CgiState cgi_rsp;
+    states status;
+    CgiState cgi_rsp;
     
-  HttpResponse rsp;
+    HttpResponse rsp;
 
   std::string response_buffer;
 
   std::string client_ip;
-
   ssize_t fd_bytes_left;
 
   client_info() : parser(),cgi_rsp(){}

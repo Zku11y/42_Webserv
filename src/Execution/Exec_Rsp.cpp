@@ -11,15 +11,17 @@ Execution::Execution(Client& client):
         req(client.parsed_req),
         cgi_exc(false)
 {    
-
     if(client.rsp.body_fd!=-1)
         close(client.rsp.body_fd);
     client.rsp.body_fd=-1;
 
     client.rsp.status_code=status;
+    client.rsp.body_size=0;
+
     client.rsp.body.clear();
     client.rsp.headers.clear();
-    client.rsp.body_size=0;
+    client.rsp.responc.clear();
+    client.rsp.set_cookies.clear();
 }
 
 
@@ -59,7 +61,7 @@ void Execution::ft_handle_resource(Client& client, Config& conf)
         ft_resolve_full_path_1();
         ft_init_cgi_var();
     }
-    
+
 
     if(s_location._returnCode!=0)
     {

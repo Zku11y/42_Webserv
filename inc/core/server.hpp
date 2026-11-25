@@ -11,6 +11,7 @@
 #define SK_PORT 8080
 #define BACKLOG_MAX SOMAXCONN
 #define T_OUT 500
+#define TT_OUT 5000
 #define CGI_T_OUT 5000
 #define W_BUFF_SIZE 24096
 #define R_BUFF_SIZE 24096
@@ -83,6 +84,7 @@ typedef struct client_info{
   
   double t_out;
   
+  double tt_out;
   
   std::string request_buffer;
 
@@ -109,6 +111,7 @@ typedef struct client_info{
         r_bytes(0),
         max_size(0),
         t_out(0.0),
+        tt_out(0.0),
         parser(),
         parsed_req(),
         status(READ),

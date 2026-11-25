@@ -155,6 +155,7 @@ void add_client(int listenFd, std::vector<pollfd> &pollfds, std::map<int, Client
   new_client.localHost = server.ip;
   new_client.localPort = server.port;
   new_client.t_out = get_time();
+  new_client.tt_out = get_time();
   new_client.status = READ;
   new_client.rsp.body_fd = -1;
   new_client.parser.setMaxBodySize(server.max_size);
@@ -395,6 +396,9 @@ int connection_handler(Config &cfg){
     add_listener(pollfds, serverfds, servers[i]);
   }
 
+  if(serverfds.empty())
+    return 1;
+
   // ft_log("Prototype listening on http://localhost:"<< client.port);
 
   while(true){
@@ -472,9 +476,11 @@ int connection_handler(Config &cfg){
       if(clients_to_close.count(crnt_client.fd))
         continue;
 
+      const double now = get_time();
       if(pollfds[i].revents & (POLLERR | POLLNVAL)
         || ((pollfds[i].revents & POLLHUP) && !(pollfds[i].revents & (POLLIN | POLLOUT)))
-        || (crnt_client.status != WAIT && get_time() - crnt_client.t_out > T_OUT)){
+        || (crnt_client.status != WAIT && now - crnt_client.t_out > T_OUT)
+        || (crnt_client.status == READ && now - crnt_client.tt_out > TT_OUT)){
 
         clients_to_close.insert(crnt_client.fd);
         continue;
@@ -651,6 +657,7 @@ int connection_handler(Config &cfg){
           switch(crnt_client.status){
             case WRITE:
               crnt_client.status = READ;
+              crnt_client.tt_out = get_time();
               pollfds[i].events = POLLIN;
               crnt_client.tw_bytes = 0;
               crnt_client.w_bytes = 0;
@@ -811,7 +818,7 @@ int main(int ac, char **av)
   try{
     Config cfg(av[1]);
     ft_log("Starting in 3, 2, 1......");
-    connection_handler(cfg);
+    return (connection_handler(cfg));
 
   }catch(std::exception &e){
     std::cerr << e.what();

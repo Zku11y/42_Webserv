@@ -47,13 +47,25 @@ void Execution::ft_handle_resource(Client& client, Config& conf)
 
     if(ft_select_location()==-1)
     {
-        ft_handle_error(client,status);
+        ft_handle_error(client,404);
         return;
     }
 
     if(ft_validate_methods()==-1)
     {
-        ft_handle_error(client,status);
+        ft_handle_error(client,405);
+        return;
+    }
+
+    if(s_location._returnCode!=0)
+    {
+        ft_handle_Redirect(client);
+        return;
+    }
+
+    if(ft_validate_root(s_location._root)==-1)
+    {
+        ft_handle_error(client,500);
         return;
     }
 
@@ -62,12 +74,7 @@ void Execution::ft_handle_resource(Client& client, Config& conf)
         ft_init_cgi_var();
     }
 
-
-    if(s_location._returnCode!=0)
-    {
-        ft_handle_Redirect(client);
-    }
-    else if(req.method=="GET")
+    if(req.method=="GET")
     {
         ft_handle_Get(client);
     }
@@ -88,7 +95,6 @@ void Execution::ft_handle_resource(Client& client, Config& conf)
 }
 
 
-
 /* **********************************************/
 /*                                              */
 /*                    Init :                    */
@@ -97,28 +103,14 @@ void Execution::ft_handle_resource(Client& client, Config& conf)
 
 int Execution::ft_select_server(Config& conf)
 {
-    int f=-1;
-    size_t i=0;
-
-    while(i<conf._servers.size())
-    { 
-        if(conf._servers[i]._port==req.localPort )
-        {
-            if(conf._servers[i]._host==req.localHost)
-            {
-                s_conf=conf._servers[i];
-                return 0;
-            }
-            if(conf._servers[i]._host=="0.0.0.0" && f==-1)
-                f = i;         
-        }
-        i++;
-    }
-
-    if(f != -1)
+    for(size_t i=0; i<conf._servers.size(); i++)
     {
-        s_conf=conf._servers[f];
-        return 0;
+        if(conf._servers[i]._port==req.localPort && 
+            conf._servers[i]._host==req.localHost)
+        {
+            s_conf=conf._servers[i];
+            return 0;
+        }
     }
 
     return -1;
@@ -143,6 +135,7 @@ int Execution::ft_validate_path()
     std::vector<std::string> tmp_1=ft_split(req.path, '/');
     std::vector<std::string> tmp_2 ;
 
+    // i add this to remeber to add a slash at the end later , sisne those 3 are geting removed  
     bool ff=(tmp_1.back().empty() || tmp_1.back()=="." || tmp_1.back()=="..");
 
     for(size_t i=0;i<tmp_1.size();i++)
@@ -180,88 +173,113 @@ int Execution::ft_validate_path()
 
 int Execution::ft_select_location()
 {
-    std::string tmp;
-    std::string tmp_path;
+    size_t best_len=0;
+    size_t best_idx=s_conf._locations.size();
+    
+    for (size_t i = 0; i < s_conf._locations.size(); i++)
+    {   
+        std::string& tmp_loc=s_conf._locations[i]._path;
+        size_t tmp_s = tmp_loc.size();
 
-    for(size_t i=0;i<s_conf._locations.size(); i++)
-    {
-        std::string P_location = s_conf._locations[i]._path;
-        size_t x=0;
-        size_t y=0;
-
-        while( x < P_location.size() 
-            && y < req.path.size() 
-            && P_location[x] == req.path[y])
-        {
-            x++;y++;
-        }
-
-        if(x==P_location.size())
-        {
-            if( y==req.path.size()
-                || P_location[P_location.size()-1]=='/'
-                || req.path[y]=='/')
-            {
-                tmp_path=P_location;
-            }
-
-            if (tmp_path.size() > tmp.size())// fix the edge case whre it dont update if it match / first that it match /xxxxx caus they have same numberof slashs
-            {
-                tmp = tmp_path;
-            }
-        }
-        else
+        if(tmp_s <= best_len)
             continue;
 
-        tmp_path="";
+        if(req.path.compare(0, tmp_s, tmp_loc)!=0)
+            continue;   //find if all tmp_loc inside of req
+
+        if(req.path.size()==tmp_s ||
+             tmp_loc[tmp_s-1]=='/' ||  // loc : /uploads/
+             req.path[tmp_s]=='/' )    // req : /uploads/index.html 
+        {
+            best_len=tmp_s;
+            best_idx=i;
+        }
+
     }
-    if(s_conf._locations.empty() || tmp=="")
-    {
-        status=404;
+    if(best_idx==s_conf._locations.size())
         return -1;
-    }
 
-    for(size_t i=0;i<s_conf._locations.size(); i++)
-    {
-        if(tmp==s_conf._locations[i]._path)
-            s_location=s_conf._locations[i];
-    }
-
+    s_location=s_conf._locations[best_idx];
     return 0;
 }
 
 int Execution::ft_validate_methods()
 {
-    if(req.method!="GET" && req.method!="POST" && req.method!="DELETE")
-    {
-        status = 501;
-        return -1;
-    }
-
-    size_t i = 0;
-    while(i<s_location._methods.size())
+    for (size_t i = 0; i < s_location._methods.size(); i++)
     {
         if(req.method==s_location._methods[i])
-            break;
-        i++;
-    }
-    if(i==s_location._methods.size())
-    {
-        status = 405;
-        return -1;
+            return 0;
     }
 
-    return 0;
+    return -1;
+}
+
+int Execution::ft_validate_root(std::string path)
+{
+    struct stat info;
+    
+    if(path.find('\0') != std::string::npos)
+        return -1;
+
+    if(stat(path.c_str(), &info) == -1)
+        return -1;
+
+    if(!S_ISDIR(info.st_mode))
+        return -1;
+
+    return -0;
+}
+
+std::string Execution::ft_fix_slashs(std::string tmp)
+{
+    int f=0;
+    std::string rs;
+
+    for(size_t i=0;i<tmp.size();i++)
+    {
+        if(tmp[i]=='/')
+        {
+            if(!f)
+            {
+                rs+=tmp[i];
+                f=1;
+                continue;
+            }
+            else
+                continue;
+        }
+        else
+        {
+            rs+=tmp[i];
+            f=0;
+        }
+    }
+
+    return rs;
 }
 
 std::string Execution::ft_resolve_full_path_2()
 {
-    return s_location._uploadStore + req.path;
+    std::string new_req_path;
+    
+    if(s_location._path[s_location._path.size()-1]=='/')
+        new_req_path =req.path.substr(s_location._path.size()-1);
+    else
+        new_req_path =req.path.substr(s_location._path.size());
+
+    return ft_fix_slashs(s_location._uploadStore + new_req_path);
 }
 
 void Execution::ft_resolve_full_path_1()
 {
-    full_path=s_location._root + req.path;  
+    std::string new_req_path;
+    
+    if(s_location._path[s_location._path.size()-1]=='/')
+        new_req_path =req.path.substr(s_location._path.size()-1);
+    else
+        new_req_path =req.path.substr(s_location._path.size());
+
+    full_path=ft_fix_slashs(s_location._root + new_req_path);  
 
     return;
 }
@@ -295,7 +313,7 @@ int Execution::ft_handle_path(std::string t, int f, struct stat &info,int &fd)
     std::vector<std::string> tmp_1=ft_split(t, '/');
     std::string tmp_2;
 
-    if(t.empty())
+    if(t.empty()|| t.find('\0') != std::string::npos)
     {
         status=500;
         return -1;
@@ -344,11 +362,11 @@ int Execution::ft_handle_path(std::string t, int f, struct stat &info,int &fd)
             if(f==2) //delet case , we dont care about last file permision
                 return 0;
 
-            fd=open(tmp_2.c_str(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
+            fd=open(tmp_2.c_str(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
         }
         else
         {
-            fd=open(tmp_2.c_str(), O_RDONLY | O_NOFOLLOW |  O_NONBLOCK | O_DIRECTORY);
+            fd=open(tmp_2.c_str(), O_PATH | O_NOFOLLOW  | O_DIRECTORY | O_CLOEXEC);
         }
 
         if(fd==-1)
@@ -371,6 +389,7 @@ int Execution::ft_handle_path(std::string t, int f, struct stat &info,int &fd)
 
     return 0;
 }
+
 
 /* **********************************************/
 /*                                              */
@@ -399,7 +418,7 @@ void Execution::ft_handle_G_autoindex(Client& client)
     std::ostringstream ss;
 
     ss << "<html> <body>"    
-        << "<h1> Index of " << req.path << " </h1>"
+        << "<h1> Index of " << ft_html_escape(req.path) << " </h1>"
         << "<ul>";
 
     while (1)
@@ -422,9 +441,9 @@ void Execution::ft_handle_G_autoindex(Client& client)
         if (name == "." || name == "..")
             continue;
             
-        ss << "<li>"   //later : encodeing space -> %20
-            << "<a href=\"" << req.path + name << "\">"
-            << name << "</a>"
+        ss << "<li>"
+            << "<a href=\"" << ft_url_encode(req.path + name) << "\">"
+            << ft_html_escape(name) << "</a>"
             << "</li>";
     }
     
@@ -637,6 +656,12 @@ void Execution::ft_handle_Post(Client& client)
         return;
     }
 
+    if(ft_validate_root(s_location._uploadStore)==-1)
+    {
+        ft_handle_error(client,500);
+        return;
+    }
+    
     std::string full_uploade_path=ft_resolve_full_path_2();
 
     if(ft_handle_path(full_uploade_path, 1, info, fd)==-1)
@@ -645,7 +670,7 @@ void Execution::ft_handle_Post(Client& client)
         return;
     }
 
-    fd=open(full_uploade_path.c_str(),O_WRONLY | O_CREAT | O_EXCL, 0644);
+    fd=open(full_uploade_path.c_str(),O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
     if(fd==-1)
     {
         if (errno == EEXIST)
@@ -698,7 +723,7 @@ void Execution::ft_handle_Post(Client& client)
     client.rsp.body_size=0;
 
     client.rsp.headers.clear();
-    client.rsp.headers["Location"] = req.path;
+    client.rsp.headers["Location"] =  ft_url_encode(req.path);
     client.rsp.headers["Content-Length"] = "0";
 }
 
@@ -859,7 +884,7 @@ void Execution::ft_handle_error_2(Client& client, int s)
 
 void Execution::ft_handle_Redirect_2(Client& client)
 {
-    std::string new_target = req.path+"/"; // later : url encoding
+    std::string new_target = ft_url_encode(req.path + "/");
 
     if(!req.queryString.empty())
     {
@@ -921,6 +946,56 @@ std::vector<std::string>	Execution::ft_split(const std::string& str, char del) c
 		start = pos + 1;
 	}
 	return res;
+}
+
+std::string Execution::ft_url_encode(std::string tmp)
+{
+    std::string result;
+    std::string hex = "0123456789ABCDEF";
+
+    for(size_t i = 0; i < tmp.size(); i++)
+    {
+        unsigned char c = static_cast<unsigned char>(tmp[i]);
+
+        if((c >= 'a' && c <= 'z') ||
+           (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') ||
+           c == '-' || c == '_' ||
+           c == '.' || c == '~' || c == '/')
+        {
+            result += c;
+        }
+        else
+        {
+            result += '%';
+            result += hex[c / 16];
+            result += hex[c % 16];
+        }
+    }
+    return result;
+}
+
+std::string Execution::ft_html_escape(std::string tmp)
+{
+    std::string result;
+
+    for(size_t i = 0; i < tmp.size(); i++)
+    {
+        if(tmp[i] == '&')
+            result += "&amp;";
+        else if(tmp[i] == '<')
+            result += "&lt;";
+        else if(tmp[i] == '>')
+            result += "&gt;";
+        else if(tmp[i] == '"')
+            result += "&quot;";
+        else if(tmp[i] == '\'')
+            result += "&#39;";
+        else
+            result += tmp[i];
+    }
+
+    return result;
 }
 
 std::string Execution::ft_trim(const std::string& str)

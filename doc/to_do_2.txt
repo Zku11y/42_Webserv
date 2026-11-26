@@ -24,3 +24,26 @@ HttpResponseBuilder::HttpResponseBuilder() {
 	status_message[505] = "HTTP Version Not Supported";
 }
 "
+
+
+
+--------
+
+
+This is correct.
+
+A 204 response must not contain a body or a Content-Length header.
+
+Dev 2 must ensure his response builder doesn't automatically insert Content-Length: 0 for 204 responses. We already included that in his TODO list.
+
+You don't need to solve that inside DELETE.
+
+
+------
+4. Remaining decisions
+Index location bypass
+Your ft_handle_G_dir() still serves an index using the current location's configuration, without checking whether the index URL belongs to a more-specific location.
+
+This remains a known routing limitation. We haven't fixed it yet.
+Different upload and root directories
+As agreed, we will test this separately later. The test confirmed that POST can successfully create a file while GET of the same URL returns 404 when the configured directories differ.

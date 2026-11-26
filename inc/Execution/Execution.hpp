@@ -45,6 +45,7 @@ class Execution
         int ft_validate_path();
         int ft_select_location();
         int ft_validate_methods();
+        int ft_validate_root(std::string path);
         void ft_init_cgi_var();
         void ft_resolve_full_path_1();
         std::string ft_resolve_full_path_2();
@@ -77,6 +78,9 @@ class Execution
         std::vector<std::string> ft_split(const std::string& str, char del) const;
         std::string ft_to_lower(const std::string& str) const;
         std::string ft_trim(const std::string& str);
+        std::string ft_fix_slashs(std::string tmp);
+        std::string ft_url_encode(std::string tmp);
+        std::string ft_html_escape(std::string tmp);
 
             //  Cgi :
         bool ft_is_cgi();

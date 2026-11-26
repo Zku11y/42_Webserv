@@ -88,18 +88,17 @@ typedef struct client_info{
   
   std::string request_buffer;
 
-  HttpParser parser;
-  HttpRequest parsed_req;
+    HttpParser parser;
+    HttpRequest parsed_req;
 
-  states status;
-  CgiState cgi_rsp;
+    states status;
+    CgiState cgi_rsp;
     
-  HttpResponse rsp;
+    HttpResponse rsp;
 
   std::string response_buffer;
 
   std::string client_ip;
-
   ssize_t fd_bytes_left;
 
   client_info()

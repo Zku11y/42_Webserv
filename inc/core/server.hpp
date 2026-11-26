@@ -10,13 +10,16 @@
 #define SK_IP INADDR_ANY
 #define SK_PORT 8080
 #define BACKLOG_MAX SOMAXCONN
-#define T_OUT 500
-#define TT_OUT 5000
-#define CGI_T_OUT 5000
+
+#define T_OUT 15000
+#define TT_OUT 60000
+#define CGI_T_OUT 30000
+
 #define W_BUFF_SIZE 24096
 #define R_BUFF_SIZE 24096
+
 #define MAX_CGI_HEADERS (16 * 1024)
-#define MAX_CGI_OUTPUT  (20 * 1024 * 1024)
+#define MAX_CGI_OUTPUT  (128UL * 1024 * 1024)
 
 enum states{
   READ,

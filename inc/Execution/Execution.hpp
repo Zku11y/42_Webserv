@@ -3,8 +3,6 @@
 #include "../main.hpp"
 #include "../core/server.hpp"
 
-#define MAX_CGI_HEADERS (16 * 1024)
-#define MAX_CGI_OUTPUT  (20 * 1024 * 1024)
 class Execution
 {
     friend int connection_handler(Config &cfg);

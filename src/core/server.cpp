@@ -45,7 +45,7 @@ static void ft_log_request(const HttpRequest& req)
     // Body
     ft_log("\n[BODY]");
     ft_log("Body Size     : " << req.body.size() << " bytes");
-    ft_log("Body Content  : [" << req.body << "]");
+    ft_log("Body Content  : [" << req.body.substr(0, 200) << "]");
 
     ft_log("========================================\n");
 }
@@ -366,7 +366,7 @@ bool sk_handle_pipes(CgiPipe pipe, CgiPipeMap &pipes, int i, std::vector<pollfd>
 
 void sk_generate_error(Client &crnt_client, std::vector<pollfd> &pollfds, int i, int error_code){
 
-  crnt_client.parsed_req = HttpRequest();
+  crnt_client.parsed_req = crnt_client.parser.get_request();;
   ft_log_request(crnt_client.parsed_req);
   ft_handle_error_3(crnt_client, error_code);
   ft_log_response(crnt_client.rsp);

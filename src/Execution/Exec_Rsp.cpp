@@ -554,10 +554,15 @@ void Execution::ft_handle_G_dir(Client& client, int& fd)
     {
         ft_handle_G_autoindex(client);
     }
+    else if(!s_location._index.empty())
+    {
+        ft_handle_error(client, 404);
+    }
     else
     {
         ft_handle_error(client, 403);
     }
+    
     return;
 }
 
@@ -616,16 +621,30 @@ void Execution::ft_handle_Post(Client& client)
     {
         if(ft_handle_path(full_path, 0, info, fd)==-1)
         {
-            ft_handle_error(client, status);
-            return;
+            if(status != 404)
+            {
+                ft_handle_error(client, status);
+                return;
+            }
+                // ./tester error , need to handle cgi file even if it do not exsit, xd , !=404 aka is misson only so it fine
+            if(ft_handle_path(full_path, 1, info, fd)==-1)
+            {
+                ft_handle_error(client, status);
+                return;
+            }
+
+            status = 0;
         }
-        if(!S_ISREG(info.st_mode))
+        else
         {
+            if(!S_ISREG(info.st_mode))
+            {
+                close(fd); fd=-1;
+                ft_handle_error(client, 403);
+                return;
+            }
             close(fd); fd=-1;
-            ft_handle_error(client, 403);
-            return;
         }
-        close(fd); fd=-1;
         cgi_req_path=req.path;
         ft_handle_cgi(client);
         return;
@@ -860,6 +879,18 @@ void Execution::ft_handle_error(Client& client, int s)
         client.rsp.headers["Allow"] = tmp;
     }
 
+    if(req.method == "HEAD")
+    {
+        if(client.rsp.body_fd != -1)
+            close(client.rsp.body_fd);
+
+        client.rsp.body_fd = -1;
+        client.rsp.body.clear();
+        client.rsp.body_size = 0;
+
+        return;
+    }
+    
     if(ft_error_1(client))
         return ;
     ft_error_2(client);

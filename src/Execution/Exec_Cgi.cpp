@@ -280,7 +280,7 @@ int Execution::ft_cgi_build_env(Client& client)
     cgi_env_1.push_back("SERVER_PROTOCOL=" + req.version);
     cgi_env_1.push_back("SERVER_SOFTWARE=webserv/1.0");
     cgi_env_1.push_back("REQUEST_URI=" + req.target);
-    // cgi_env_1.push_back("PATH_INFO=");
+    cgi_env_1.push_back("PATH_INFO="+req.path);
     cgi_env_1.push_back("REMOTE_ADDR=" + client.client_ip);
     cgi_env_1.push_back("PATH=/usr/bin:/bin");
 

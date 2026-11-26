@@ -33,14 +33,13 @@ static void ft_log_request(const HttpRequest& req)
     ft_log("Host          : [" << req.host << "]");
     ft_log("Port          : [" << req.port << "]");
 
-    // Headers
-    // ft_log("\n[HEADERS] (" << req.headers.size() << ")");
-
-    // for (std::map<std::string, std::string>::const_iterator it =
-    //      req.headers.begin(); it != req.headers.end(); ++it)
-    // {
-    //     ft_log("  " << it->first << " : [" << it->second << "]");
-    // }
+    // HEADERS
+    ft_log("\n[HEADERS] (" << req.headers.size() << ")");
+    for (std::map<std::string, std::string>::const_iterator it =
+         req.headers.begin(); it != req.headers.end(); ++it)
+    {
+        ft_log("  " << it->first << " : [" << it->second << "]");
+    }
 
     // Body
     ft_log("\n[BODY]");

@@ -652,7 +652,19 @@ void Execution::ft_handle_Post(Client& client)
 
     if(!s_location._uploadEnable)
     {
-        ft_handle_error(client, 403);
+        if(client.rsp.body_fd != -1)
+            close(client.rsp.body_fd);
+
+        client.rsp.body_fd = -1;
+        client.rsp.status_code = 200;
+        client.rsp.body = req.body;
+        client.rsp.body_size = client.rsp.body.size();
+
+        client.rsp.headers.clear();
+        client.rsp.headers["Content-Type"] = "application/octet-stream";
+        client.rsp.headers["Content-Length"] =
+            ft_to_string(client.rsp.body_size);
+
         return;
     }
 

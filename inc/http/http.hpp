@@ -16,10 +16,14 @@ struct HttpRequest
     std::string							queryString;
 	std::string							version;
 	std::map<std::string, std::string>	headers;
+	std::map<std::string, std::string>	cookies;
 	std::string							body;
 
 	std::string							host;
 	std::string							port;
+	int									localPort;
+
+	HttpRequest() : localPort(0) {}
 };
 
 class HttpParser
@@ -59,6 +63,7 @@ class HttpParser
 
 		bool	parse_request_line(std::string& buffer);
 		bool	parse_headers(std::string& buffer);
+		void	parse_cookies();
 		bool	parse_body(std::string& buffer);
 
 		bool		set_error(ErrorCode code);

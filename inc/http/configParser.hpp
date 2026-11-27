@@ -47,10 +47,12 @@ class ConfigParser
 		void		parseUploadEnable(LocationConfig& location);
 		void		parseUploadStore(LocationConfig& location);
 		void		parseReturn(LocationConfig& location);
+		void		parseClientMaxBodySize(LocationConfig& server);
 		void		parseCgiExt(LocationConfig& location);
 
 
 		bool		hasMoreTokens() const;
+		bool		hasValue() const;
 		std::string	currentToken() const;
 		void		advance();
 		void		expect(const std::string& token);

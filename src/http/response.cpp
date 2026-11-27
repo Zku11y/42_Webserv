@@ -89,8 +89,7 @@ bool	HttpResponseBuilder::valid_header_value(const std::string& value) const{
 	return true;
 }
 
-std::string HttpResponseBuilder::read_body_fd(int body_fd) const{
-	const size_t	m_size = 1024^2;
+std::string HttpResponseBuilder::read_body_fd(int body_fd, size_t m_size) const{
 	std::string 	result;
 	char			buffer[8192];
 	ssize_t			bytes;
@@ -113,6 +112,13 @@ std::string HttpResponseBuilder::read_body_fd(int body_fd) const{
 	}
 	return result;
 }
+
+void	HttpResponseBuilder::set_cookie(HttpResponse& response, const std::string& name, const std::string& value) const{
+	if (name.empty())
+		return;
+	response.headers["Set-Cookie"] = name + "=" + value + "; Path=/; HttpOnly";
+}
+
 
 std::string HttpResponseBuilder::build(HttpResponse& response)
 {
@@ -160,7 +166,7 @@ std::string HttpResponseBuilder::build(HttpResponse& response)
 	if (response.body_fd == -1)
 		result += response.body;
 	else if (response.body_size <= MAX_INLINE_BODY)
-		result += read_body_fd(response.body_fd);
+		result += read_body_fd(response.body_fd, MAX_INLINE_BODY);
 
 	return result;
 }

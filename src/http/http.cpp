@@ -77,6 +77,7 @@ bool	HttpParser::parse_headers(std::string& buffer){
 			if (!validate_request_headers()){
 				return set_error(BAD_REQUEST);
 			}
+			parse_cookies();
 			buffer.erase(0, 2);
 			return determine_body_framing();
 		}
@@ -97,14 +98,46 @@ bool	HttpParser::parse_headers(std::string& buffer){
 			return set_error(BAD_REQUEST);
 		}
 		name = to_lower(name);
-		if (name == "host" && request.headers.find(name) != request.headers.end()){
+		if ((name == "host" || name == "content-type") && request.headers.find(name) != request.headers.end()){
 			return set_error(BAD_REQUEST);
 		}
 		if (request.headers.find(name) == request.headers.end())
 			request.headers[name] = value;
+		else if (name == "cookie")
+			request.headers[name] += "; " + value;
 		else
 			request.headers[name] += "," + value;
 		buffer.erase(0, end + 2);
+	}
+}
+
+void	HttpParser::parse_cookies(){
+	std::map<std::string, std::string>::const_iterator	it;
+	size_t												start;
+	size_t												end;
+	size_t												equal;
+	std::string											part;
+	std::string											name;
+	std::string											value;
+
+	it = request.headers.find("cookie");
+	if (it == request.headers.end())
+		return;
+	start = 0;
+	while (start < it->second.size())
+	{
+		end = it->second.find(";", start);
+		if (end == std::string::npos)
+			end = it->second.size();
+		part = trim_ows(it->second.substr(start, end - start));
+		equal = part.find('=');
+		if (equal != std::string::npos){
+			name = trim_ows(part.substr(0, equal));
+			value = trim_ows(part.substr(equal + 1));
+			if (!name.empty())
+				request.cookies[name] = value;
+		}
+		start = end + 1;
 	}
 }
 
@@ -148,6 +181,10 @@ bool	HttpParser::parse_chunk_size(std::string& buffer){
 	if (!parse_hex_size(line, chunk_size)){
 		return set_error(BAD_REQUEST);
 	}
+	if (request.body.size() > max_body_size)
+		return set_error(CONTENT_TOO_LARGE);
+	if (chunk_size > max_body_size - request.body.size())
+		return set_error(CONTENT_TOO_LARGE);
 	buffer.erase(0, end + 2);
 	chunk_received = 0;
 	if (chunk_size == 0)

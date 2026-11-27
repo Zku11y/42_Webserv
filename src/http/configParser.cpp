@@ -19,6 +19,7 @@ ConfigParser::ConfigParser(const std::string& filename)
 	_locationHandlers["upload_enable"] = &ConfigParser::parseUploadEnable;
 	_locationHandlers["upload_store"] = &ConfigParser::parseUploadStore;
 	_locationHandlers["return"] = &ConfigParser::parseReturn;
+	_locationHandlers["client_max_body_size"] = &ConfigParser::parseClientMaxBodySize;
 	_locationHandlers["cgi_ext"] = &ConfigParser::parseCgiExt;
 	
 	//////////
@@ -41,10 +42,12 @@ ConfigParser::ConfigParser(const std::string& filename)
 
 void	ConfigParser::parseMethods(LocationConfig& location){
 	expect("methods");
-	if (!hasMoreTokens())
+	if (!hasValue())
 		throw std::runtime_error("Expected methods");
 	std::vector<std::string> methods;
 	while (hasMoreTokens() && currentToken() != ";"){
+		if (!hasValue())
+			throw std::runtime_error("Expected method");
 		methods.push_back(currentToken());
 		advance();
 	}
@@ -58,7 +61,7 @@ void	ConfigParser::parseMethods(LocationConfig& location){
 
 void	ConfigParser::parseRoot(LocationConfig& location){
 	expect("root");
-	if (!hasMoreTokens())
+	if (!hasValue())
 		throw std::runtime_error("Expected root path");
 	location.setRoot(currentToken());
 	advance();
@@ -67,7 +70,7 @@ void	ConfigParser::parseRoot(LocationConfig& location){
 
 void	ConfigParser::parseIndex(LocationConfig& location){
 	expect("index");
-	if (!hasMoreTokens())
+	if (!hasValue())
 		throw std::runtime_error("Expected index path");
 	location.setIndex(currentToken());
 	advance();
@@ -76,7 +79,7 @@ void	ConfigParser::parseIndex(LocationConfig& location){
 
 void	ConfigParser::parseAutoindex(LocationConfig& location){
 	expect("autoindex");
-	if (!hasMoreTokens())
+	if (!hasValue())
 		throw std::runtime_error("Expected autoindex state");
 	if (currentToken() == "on")
 		location.setAutoindex(true);
@@ -90,7 +93,7 @@ void	ConfigParser::parseAutoindex(LocationConfig& location){
 
 void	ConfigParser::parseUploadEnable(LocationConfig& location){
 	expect("upload_enable");
-	if (!hasMoreTokens())
+	if (!hasValue())
 		throw std::runtime_error("Expected upload_enable state");
 	if (currentToken() == "on")
 		location.setUploadEnable(true);
@@ -104,7 +107,7 @@ void	ConfigParser::parseUploadEnable(LocationConfig& location){
 
 void	ConfigParser::parseUploadStore(LocationConfig& location){
 	expect("upload_store");
-	if (!hasMoreTokens())
+	if (!hasValue())
 		throw std::runtime_error("Expected upload_store path");
 	location.setUploadStore(currentToken());
 	advance();
@@ -113,24 +116,38 @@ void	ConfigParser::parseUploadStore(LocationConfig& location){
 
 void	ConfigParser::parseReturn(LocationConfig& location){
 	expect("return");
-	if (!hasMoreTokens())
+	if (!hasValue())
 		throw std::runtime_error("Expected return path");
-	location.setReturnCode(strtoi(currentToken()));
+	int code = strtoi(currentToken());
+	if (code != 301 && code != 302)
+		throw std::runtime_error("Invalid redirect status code");
+	location.setReturnCode(code);
 	advance();
-	if (!hasMoreTokens() || currentToken() == ";")
+	if (!hasValue())
 		throw std::runtime_error("Expected return target");
 	location.setReturnTarget(currentToken());
 	advance();
 	expect(";");
 }
 
+void	ConfigParser::parseClientMaxBodySize(LocationConfig& location){
+	expect("client_max_body_size");
+	if (!hasValue())
+		throw std::runtime_error("Expected client max body size");
+	size_t	size = parseSize(currentToken());
+	location.setClientMaxBodySize(size);
+	location.setHas_max_body(true);
+	advance();
+	expect(";");
+}
+
 void	ConfigParser::parseCgiExt(LocationConfig& location){
 	expect("cgi_ext");
-	if (!hasMoreTokens() || currentToken() == ";")
+	if (!hasValue())
 		throw std::runtime_error("Expected CGI extension");
 	std::string extention = currentToken();
 	advance();
-	if (!hasMoreTokens() || currentToken() == ";")
+	if (!hasValue())
 		throw std::runtime_error("Expected CGI interpreter");
 	std::string	interpreter = currentToken();
 	advance();
@@ -158,7 +175,7 @@ int	ConfigParser::strtoi(const std::string& value){
 
 void	ConfigParser::parseListen(ServerConfig& server){
 	expect("listen");
-	if (!hasMoreTokens() || currentToken() == ";")
+	if (!hasValue())
 		throw std::runtime_error("Expected port");
 	int	port = strtoi(currentToken());
 	if (port < 1 || port > 65535)
@@ -210,7 +227,7 @@ void	ConfigParser::parseHost(ServerConfig& server){
 	uint32_t	ip;
 
 	expect("host");
-	if (!hasMoreTokens() || currentToken() == ";")
+	if (!hasValue())
 		throw std::runtime_error("Expected host");
 	ip = convert_ip(currentToken());
 	if (ip == static_cast<uint32_t>(-1))
@@ -272,7 +289,7 @@ size_t	ConfigParser::parseSize(const std::string& value){
 
 void	ConfigParser::parseClientMaxBodySize(ServerConfig& server){
 	expect("client_max_body_size");
-	if (!hasMoreTokens() || currentToken() == ";")
+	if (!hasValue())
 		throw std::runtime_error("Expected client max body size");
 	size_t	size = parseSize(currentToken());
 	server.setClientMaxBodySize(size);
@@ -282,11 +299,13 @@ void	ConfigParser::parseClientMaxBodySize(ServerConfig& server){
 
 void	ConfigParser::parseErrorPage(ServerConfig& server){
 	expect("error_page");
-	if (!hasMoreTokens() || currentToken() == ";")
+	if (!hasValue())
 		throw std::runtime_error("Expected error status code");
 	int code = strtoi(currentToken());
+	if (code < 400 || code > 599)
+		throw std::runtime_error("Error page status code out of range");
 	advance();
-	if (!hasMoreTokens() || currentToken() == ";")
+	if (!hasValue())
 		throw std::runtime_error("Expected error page path");
 	std::string	path = currentToken();
 	advance();
@@ -317,6 +336,11 @@ void	ConfigParser::advance(){
 
 bool	ConfigParser::hasMoreTokens() const{
 	return _pos < _tokens.size();
+}
+
+bool	ConfigParser::hasValue() const{
+	return hasMoreTokens() && currentToken() != ";"
+		&& currentToken() != "{" && currentToken() != "}";
 }
 
 void ConfigParser::readFile(){
@@ -377,7 +401,7 @@ void	ConfigParser::parseLocation(ServerConfig& server){
 	LocationConfig	location;
 	std::set<std::string> seen;
 	expect("location");
-	if (!hasMoreTokens())
+	if (!hasValue())
 		throw std::runtime_error("Expected location paath");
 	location.setPath(currentToken());
 	advance();
@@ -433,6 +457,7 @@ void	ConfigParser::parseServer(Config& config){
 	if (!hasMoreTokens())
 		throw std::runtime_error("Unclosed server block");
 	expect("}");
+	server.applyLocationDefaults();
 	config.addServer(server);
 }
 

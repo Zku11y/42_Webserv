@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <set>
+#include <cctype>
 
 static bool	hasDot(const std::string& path){
 	size_t		start;
@@ -27,7 +28,8 @@ static bool	hasDot(const std::string& path){
 }
 
 
-LocationConfig::LocationConfig() : _autoindex(false), _uploadEnable(false), _returnCode(0){}
+LocationConfig::LocationConfig() : _autoindex(false), _uploadEnable(false), _returnCode(0), 
+		_clientMaxBodySize(0), _hasMaxBodySize(false){}
 LocationConfig::~LocationConfig(){}
 
 void	LocationConfig::validateMethods() const{
@@ -52,6 +54,23 @@ void	LocationConfig::validateReturn() const{
 		throw std::runtime_error("Invalid redirect status code");
 	if (_returnTarget.empty())
 		throw std::runtime_error("Redirect target cannot be empty");
+	size_t	start;
+	for (size_t i = 0; i < _returnTarget.size(); i++){
+		if (_returnTarget[i] == '\r' || _returnTarget[i] == '\n')
+			throw std::runtime_error("Unsafe redirect target");
+	}
+	if (_returnTarget.compare(0, 7, "http://") == 0)
+		start = 7;
+	else if (_returnTarget.compare(0, 8, "https://") == 0)
+		start = 8;
+	else
+		return;
+	if (start >= _returnTarget.size()
+		|| _returnTarget[start] == '/'
+		|| _returnTarget[start] == '?'
+		|| _returnTarget[start] == '#'
+		|| _returnTarget[start] == ':')
+		throw std::runtime_error("Invalid absolute redirect URL");
 }
 
 void	LocationConfig::validateUpload() const{
@@ -75,6 +94,8 @@ void	LocationConfig::validateCgi() const{
 			throw std::runtime_error("CGI extension cannot contain multiple dots");
 		if (it->second.empty())
 			throw std::runtime_error("CGI interpreter cannot be empty");
+		if (it->second[0] != '/')
+			throw std::runtime_error("CGI interpreter must be an absolute path");
 		if (hasDot(it->second))
 			throw std::runtime_error("CGI interpreter cannot contain dot segments");
 		it++;
@@ -166,6 +187,14 @@ void	LocationConfig::setReturnTarget(const std::string& returntarget){
 	_returnTarget = returntarget;
 }
 
+void	LocationConfig::setClientMaxBodySize(size_t size){
+	_clientMaxBodySize = size;
+}
+
+void	LocationConfig::setHas_max_body(bool fg){
+	_hasMaxBodySize = fg;
+}
+
 void	LocationConfig::addCgi(const std::string& extension, const std::string& interpreter){
 	if (_cgi.find(extension) != _cgi.end())
 		throw std::runtime_error("Duplicate cgi_ext: " + extension);
@@ -213,6 +242,14 @@ const std::string&	LocationConfig::getReturnTarget() const{
 	return _returnTarget;
 }
 
+size_t	LocationConfig::getClientMaxBodySize() const{
+	return _clientMaxBodySize;
+}
+
+bool	LocationConfig::getHas_max_body() const{
+	return _hasMaxBodySize;
+}
+
 const std::map<std::string, std::string>&	LocationConfig::getCGI() const{
 	return _cgi;
 }
@@ -247,7 +284,7 @@ void	ServerConfig::validateLocations() const{
 			throw std::runtime_error("Duplicate location: " + _locations[i].getPath());
 		seen.insert(_locations[i].getPath());
 	}
-	
+
 }
 
 void	ServerConfig::validate() const{
@@ -259,6 +296,14 @@ void	ServerConfig::validate() const{
 		throw std::runtime_error("Server requires at least one location");
 	validateErrorPages();
 	validateLocations();
+}
+
+void	ServerConfig::applyLocationDefaults(){
+	for (size_t a = 0; a < _locations.size(); a++){
+		if (!_locations[a].getHas_max_body())
+			_locations[a].setClientMaxBodySize(_clientMaxBodySize);
+	}
+	
 }
 
 ////////
@@ -337,12 +382,12 @@ void ServerConfig::addLocation(const LocationConfig& location){
 }
 
 void	Config::validate(){
-	std::set<std::pair<std::string, int> >	seen;
+	std::set<std::pair<uint32_t , int> >	seen;
 	if (_servers.empty())
 		throw std::runtime_error("Configuration contains no server");
 	for (size_t i = 0; i < _servers.size(); i++){
 		_servers[i].validate();
-		std::pair<std::string, int> endpoint(_servers[i].getHost(), _servers[i].getPort());
+		std::pair<uint32_t , int> endpoint(_servers[i].getIp(), _servers[i].getPort());
 			if (seen.find(endpoint) != seen.end())
 			throw std::runtime_error("Duplicate server host:port");
 		seen.insert(endpoint);

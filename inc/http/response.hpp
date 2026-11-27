@@ -6,14 +6,14 @@ struct HttpResponse
 {
 	int									status_code;
 	std::map<std::string, std::string>	headers;
-    std::vector<std::string> set_cookies;
+    std::vector<std::string> 			set_cookies;
 
 	std::string							body;
 
 	int									body_fd;
 	size_t								body_size;
 
-	std::string           responc; // response buffer merging headers and body
+	std::string           				responc;
 };
 
 class	HttpResponseBuilder{
@@ -32,5 +32,5 @@ class	HttpResponseBuilder{
 		HttpResponseBuilder();
 		~HttpResponseBuilder();
 
-		void	build(HttpResponse&	response);
+	void	build(HttpResponse&	response);
 };

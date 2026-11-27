@@ -51,6 +51,12 @@ void Execution::ft_handle_resource(Client& client, Config& conf)
         return;
     }
 
+    if(req.body.size() > s_location.getClientMaxBodySize())
+    {
+        ft_handle_error(client,413);
+        return;
+    }
+    
     if(ft_validate_methods()==-1)
     {
         ft_handle_error(client,405);

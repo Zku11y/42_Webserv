@@ -106,6 +106,8 @@ bool	HttpParser::parse_headers(std::string& buffer){
 		}
 		if (request.headers.find(name) == request.headers.end())
 			request.headers[name] = value;
+		else if (name == "cookie")
+			request.headers[name] += "; " + value;
 		else
 			request.headers[name] += "," + value;
 		buffer.erase(0, end + 2);
@@ -152,6 +154,10 @@ bool	HttpParser::parse_chunk_size(std::string& buffer){
 	if (!parse_hex_size(line, chunk_size)){
 		return set_error(BAD_REQUEST);
 	}
+	if (request.body.size() > max_body_size)
+		return set_error(CONTENT_TOO_LARGE);
+	if (chunk_size > max_body_size - request.body.size())
+		return set_error(CONTENT_TOO_LARGE);
 	buffer.erase(0, end + 2);
 	chunk_received = 0;
 	if (chunk_size == 0)

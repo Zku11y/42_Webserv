@@ -18,6 +18,8 @@ class LocationConfig
 
 		int							_returnCode;
 		std::string					_returnTarget;
+		size_t						_clientMaxBodySize;
+		bool						_hasMaxBodySize;
 
 		std::map<std::string, std::string>	_cgi;
 
@@ -32,6 +34,7 @@ class LocationConfig
 		LocationConfig();
 		~LocationConfig();
 
+
 		void	validate() const;
 
 		const std::string&							getPath() const;
@@ -43,8 +46,10 @@ class LocationConfig
 		const std::string&							getUploadStore() const;
 		int											getReturnCode() const;
 		const std::string&							getReturnTarget() const;
+		size_t										getClientMaxBodySize() const;
+		bool										getHas_max_body() const;
 		const std::map<std::string, std::string>&	getCGI() const;
-	
+
 
 		void	setPath(const std::string& path);
 		void	setMethods(const std::vector<std::string>& methods);
@@ -57,8 +62,12 @@ class LocationConfig
 
 		void	setReturnCode(const int returnCode);
 		void	setReturnTarget(const std::string& returntarget);
+		void	setClientMaxBodySize(size_t size);
+		void	setHas_max_body(bool fg);
 
 		void	addCgi(const std::string& extension, const std::string& interpreter);
+		
+		std::string	to_lower(const std::string& str) const;
 };
 
 class	ServerConfig
@@ -82,6 +91,7 @@ class	ServerConfig
 		void		validateLocations() const;
 		void		validateErrorPages() const;
 		void		validate() const;
+		void		applyLocationDefaults();
 
 		int									getPort() const;
 		uint32_t							getIp() const;
@@ -91,7 +101,7 @@ class	ServerConfig
 		const std::map<int, std::string>&	getErrorPages() const;
 		const std::vector<LocationConfig>&	getLocations() const;
 
-		
+
 		void	setPort(int port);
 		void	setIp(uint32_t ip);
 		void	setHost(const std::string& host);

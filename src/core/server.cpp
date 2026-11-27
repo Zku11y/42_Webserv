@@ -248,6 +248,12 @@ int add_listener(std::vector<pollfd> &pollfds, std::vector<server_info> &serverf
   listen_info.port = port;
   listen_info.max_size = server.getClientMaxBodySize();
 
+  for(size_t i = 0; i < server.getLocations().size(); i++)
+  {
+      if(server.getLocations()[i].getClientMaxBodySize() > listen_info.max_size)
+          listen_info.max_size = server.getLocations()[i].getClientMaxBodySize();
+  }
+
   pollfd listen_pfd = {};
     listen_pfd.fd = listenFd;
     listen_pfd.events = POLLIN;

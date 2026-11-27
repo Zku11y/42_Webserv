@@ -119,8 +119,9 @@ void HttpResponseBuilder::build(HttpResponse& response)
 {
 	std::stringstream   ss;
 	std::map<std::string, std::string>::const_iterator  it;
-	// const size_t MAX_INLINE_BODY = 1024;
 
+	response.responc.clear();
+	
 	ss.imbue(std::locale::classic());
 	if (status_message.find(response.status_code) == status_message.end())
 		response.status_code = 500;
@@ -136,7 +137,8 @@ void HttpResponseBuilder::build(HttpResponse& response)
 	erase_header(response, "transfer-encoding");
 	if (response.status_code == 204){
 		response.body.clear();
-		close(response.body_fd);
+		if(response.body_fd!=-1)
+			close(response.body_fd);
 		response.body_fd = -1;
 		response.body_size = 0;
 		erase_header(response, "content-length");
@@ -157,9 +159,17 @@ void HttpResponseBuilder::build(HttpResponse& response)
 		response.responc += it->second;
 		response.responc += "\r\n";
 	}
+
+    // Set-Cookie headers
+    for (size_t i = 0; i < response.set_cookies.size(); i++){
+        if (!valid_header_value(response.set_cookies[i]))
+            continue;
+        response.responc += "Set-Cookie: ";
+        response.responc += response.set_cookies[i];
+        response.responc += "\r\n";
+    }
+	
 	response.responc += "\r\n";
 	if (response.body_fd == -1)
 		response.responc += response.body;
-	// else if (response.body_size <= MAX_INLINE_BODY)
-	// 	response.responc += read_body_fd(response.body_fd, MAX_INLINE_BODY);
 }

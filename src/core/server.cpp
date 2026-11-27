@@ -340,6 +340,7 @@ bool sk_handle_pipes(CgiPipe pipe, CgiPipeMap &pipes, int i, std::vector<pollfd>
           return true;       
     }
     pipe.client.cgi_rsp.stdin_write_fd = -1;
+    std::string().swap(pipe.client.parsed_req.body); //new -> free the request
   }
   else if(pipe.p_type == P_STDOUT){
     if((pollfds[i].revents & (POLLERR)))
@@ -369,20 +370,44 @@ bool sk_handle_pipes(CgiPipe pipe, CgiPipeMap &pipes, int i, std::vector<pollfd>
 }
 
 
-void sk_generate_error(Client &crnt_client, std::vector<pollfd> &pollfds, int i, int error_code){
+// void sk_generate_error(Client &crnt_client, std::vector<pollfd> &pollfds, int i, int error_code){
 
-  crnt_client.parsed_req = crnt_client.parser.get_request();;
-  ft_log_request(crnt_client.parsed_req);
-  ft_handle_error_3(crnt_client, error_code);
-  ft_log_response(crnt_client.rsp);
-  // crnt_client.rsp.headers["Connection"] = "close";
-  HttpResponseBuilder builder;
-  builder.build(crnt_client.rsp);
+//   crnt_client.parsed_req = crnt_client.parser.get_request();;
+//   ft_log_request(crnt_client.parsed_req);
+//   ft_handle_error_3(crnt_client, error_code);
+//   ft_log_response(crnt_client.rsp);
+//   // crnt_client.rsp.headers["Connection"] = "close";
+//   HttpResponseBuilder builder;
+//   builder.build(crnt_client.rsp);
 
-  crnt_client.r_bytes = 0;
-  crnt_client.status = WRITE_THEN_CLOSE;
-  crnt_client.t_out = get_time();
-  pollfds[i].events = POLLOUT;
+//   crnt_client.r_bytes = 0;
+//   crnt_client.status = WRITE_THEN_CLOSE;
+//   crnt_client.t_out = get_time();
+//   pollfds[i].events = POLLOUT;
+// }
+
+void sk_generate_error(Client &crnt_client,
+    std::vector<pollfd> &pollfds, int i, int error_code)
+{
+    if(crnt_client.status == READ)
+    {
+        crnt_client.parser.transfer_request(crnt_client.parsed_req);
+        crnt_client.parsed_req.localHost = crnt_client.localHost;
+        crnt_client.parsed_req.localPort = crnt_client.localPort;
+    }
+
+    ft_log_request(crnt_client.parsed_req);
+        std::string().swap(crnt_client.parsed_req.body); //free mem
+        ft_handle_error_3(crnt_client, error_code);
+    ft_log_response(crnt_client.rsp);
+
+    HttpResponseBuilder builder;
+    builder.build(crnt_client.rsp);
+
+    crnt_client.r_bytes = 0;
+    crnt_client.status = WRITE_THEN_CLOSE;
+    crnt_client.t_out = get_time();
+    pollfds[i].events = POLLOUT;
 }
 
 int connection_handler(Config &cfg){
@@ -538,7 +563,9 @@ int connection_handler(Config &cfg){
 
         else if(crnt_client.parser.is_complete()){
       
-          crnt_client.parsed_req = crnt_client.parser.get_request();
+          // crnt_client.parsed_req = crnt_client.parser.get_request();   // old
+          crnt_client.parser.transfer_request(crnt_client.parsed_req);  //new -> memory optimazion , remove hard copy , to .swap() function
+
           crnt_client.parsed_req.localHost = crnt_client.localHost; 
           crnt_client.parsed_req.localPort = crnt_client.localPort; 
           ft_log_request(crnt_client.parsed_req);
@@ -555,7 +582,8 @@ int connection_handler(Config &cfg){
 
             continue;
           }
-        
+
+          std::string().swap(crnt_client.parsed_req.body); //new
           crnt_client.r_bytes = 0;
 
           // std::map<std::string, std::string>::const_iterator connection =
@@ -664,7 +692,10 @@ int connection_handler(Config &cfg){
               pollfds[i].events = POLLIN;
               crnt_client.tw_bytes = 0;
               crnt_client.w_bytes = 0;
-              crnt_client.rsp.responc.clear();
+
+              // crnt_client.rsp.responc.clear(); //old
+              std::string().swap(crnt_client.rsp.responc); //new
+
               crnt_client.parser.reset();
               crnt_client.response_buffer.clear();
               break;
@@ -700,6 +731,9 @@ int connection_handler(Config &cfg){
         if(error_code != 0){
           sk_close_pipe(cgi.stdin_write_fd, pipes, pollfds);
           sk_close_pipe(cgi.stdout_read_fd, pipes, pollfds);
+
+          std::string().swap(client.parsed_req.body); //new
+          std::string().swap(cgi.raw_output); //new  -> both free mem
 
           if(cgi.pid > 0 && !cgi.child_reaped) {
             kill(cgi.pid, SIGKILL);
@@ -747,6 +781,8 @@ int connection_handler(Config &cfg){
 
         sk_close_pipe(cgi.stdin_write_fd, pipes, pollfds);
         sk_close_pipe(cgi.stdout_read_fd, pipes, pollfds);
+
+        std::string().swap(client.parsed_req.body); //new
 
         ft_cgi_finish(client);
 

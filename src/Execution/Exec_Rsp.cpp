@@ -663,7 +663,7 @@ void Execution::ft_handle_Post(Client& client)
 
         client.rsp.body_fd = -1;
         client.rsp.status_code = 200;
-        client.rsp.body = req.body;
+        client.rsp.body.swap(req.body);
         client.rsp.body_size = client.rsp.body.size();
 
         client.rsp.headers.clear();

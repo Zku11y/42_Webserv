@@ -309,8 +309,6 @@ int	HttpParser::hex_value(char c) const{
 bool	HttpParser::valid_decoded_path(const std::string& path) const{
 	unsigned char	x;
 	std::string		part;
-	size_t			start;
-	size_t			end;
 
 	if (path.empty() || path[0] != '/')
 		return false;
@@ -320,17 +318,7 @@ bool	HttpParser::valid_decoded_path(const std::string& path) const{
 		if (x < 32 || x == 127)
 			return false;
 	}
-	start = 1;
-	while (start < path.size())
-	{
-		end = path.find('/', start);
-		if (end == std::string::npos)
-			end = path.size();
-		part = path.substr(start, end - start);
-		// if (part == "." || part == "..")
-		// 	return false;
-		start = end + 1;
-	}
+
 	return true;
 }
 
@@ -382,9 +370,21 @@ bool	HttpParser::set_error(ErrorCode code){
 
 void	HttpParser::reset(){
 	state = REQUEST_LINE;
+
+	std::string().swap(request.body); //new
+
 	request = HttpRequest();
 	content_length = 0;
 	chunk_size = 0;
 	chunk_received = 0;
 	error_code = NO_ERROR;
+}
+
+void HttpParser::transfer_request(HttpRequest& destination)
+{
+    std::string tmp;
+
+    tmp.swap(request.body);
+    destination = request;
+    destination.body.swap(tmp);
 }

@@ -465,5 +465,8 @@ void	ConfigParser::parseConfig(Config& config){
 void ConfigParser::parse(Config& config){
 	readFile();
 	tokenize();
+
+    std::string().swap(_content); //new
+
 	parseConfig(config);
 }

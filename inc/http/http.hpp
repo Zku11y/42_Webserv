@@ -110,4 +110,6 @@ class HttpParser
 
 		State	get_state() const;
 		const HttpRequest&	get_request() const;
+		void transfer_request(HttpRequest& destination);
+
 };

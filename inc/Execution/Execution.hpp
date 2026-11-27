@@ -11,7 +11,7 @@ class Execution
     private:
         int status;
 
-        HttpRequest req;
+        HttpRequest& req;
 
         ServerConfig s_conf;
         LocationConfig s_location;

@@ -497,6 +497,9 @@ void ft_handle_error_3(Client& client, int s)
 
     client.rsp.status_code=s;
     client.rsp.headers.clear();
+    client.rsp.set_cookies.clear();
+    std::string().swap(client.cgi_rsp.raw_output); //new
+
     client.rsp.headers["Content-Type"] = "text/html";
 
     std::stringstream ss;
@@ -651,6 +654,10 @@ void ft_cgi_finish(Client& client)
             f_has_content_type = true;
             tmp_headers["content-type"] = tmp_3_val;
         }
+        else if(key=="set-cookie")
+        {
+            client.rsp.set_cookies.push_back(tmp_3_val);
+        }
         else if (key == "transfer-encoding")
         {
             ft_handle_error_3(client, 502);
@@ -658,7 +665,6 @@ void ft_cgi_finish(Client& client)
         }
         else if (
             key == "content-length" ||
-            // key == "transfer-encoding" ||
             key == "connection" || //later
             key == "keep-alive" ||
             key == "te" ||

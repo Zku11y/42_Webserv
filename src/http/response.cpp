@@ -6,11 +6,15 @@ HttpResponseBuilder::HttpResponseBuilder() {
 	status_message[204] = "No Content";
 	status_message[301] = "Moved Permanently";
 	status_message[302] = "Found";
+	status_message[303] = "See Other";
 	status_message[400] = "Bad Request";
+	status_message[401] = "Unauthorized";
 	status_message[403] = "Forbidden";
 	status_message[404] = "Not Found";
 	status_message[405] = "Method Not Allowed";
+	status_message[409] = "Conflict";
 	status_message[413] = "Content Too Large";
+	status_message[415] = "Unsupported Media Type";
 	status_message[500] = "Internal Server Error";
 	status_message[501] = "Not Implemented";
 	status_message[502] = "Bad Gateway";
@@ -171,5 +175,8 @@ void HttpResponseBuilder::build(HttpResponse& response)
 	
 	response.responc += "\r\n";
 	if (response.body_fd == -1)
+	{
 		response.responc += response.body;
+		std::string().swap(response.body);		
+	}
 }

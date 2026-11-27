@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#141414">
+  <title>Manual test · Webserv</title>
+  <link rel="stylesheet" href="bench.css">
+  <script defer src="official.js"></script>
+  <script defer src="cases.js"></script>
+  <script defer src="manual.js"></script>
+</head>
+<body>
+  <header><div class="bar">
+    <a class="brand" href="http://127.0.0.1:8088/"><b class="mark">42</b> webserv<span>/</span>lab</a>
+    <nav aria-label="Main navigation">
+      <a href="http://127.0.0.1:8088/">Quick tests</a>
+      <a href="http://127.0.0.1:8080/bench/">Intra tester</a>
+      <a href="manual.html" aria-current="page">Manual test</a>
+    </nav>
+  </div></header>
+  <main>
+    <div class="intro">
+      <div><p class="eyebrow">HTTP / Evaluation console</p><h1>Manual test<span>.</span></h1>
+        <p>Choose a listener, edit a request and inspect the response.</p>
+      </div>
+      <div><label for="listener">Target listener</label>
+        <select id="listener">
+          <option value="http://127.0.0.1:8088/manual.html">Quick tests · 8088</option>
+          <option value="http://127.0.0.1:8080/bench/manual.html">Intra tester · 8080</option>
+          <option value="http://127.0.0.1:8089/tools/manual.html">Listener B · 8089</option>
+        </select>
+      </div>
+    </div>
+    <noscript>Enable JavaScript to send manual requests.</noscript>
+    <div class="manual-layout">
+      <div class="manual-forms">
+        <section class="panel" aria-labelledby="request-title">
+          <h2 id="request-title">Send a request</h2>
+          <form id="request-form">
+            <label for="preset">Start from a test</label>
+            <select id="preset"><option value="">Custom request</option></select>
+            <div class="method-path">
+              <div><label for="method">Method</label>
+                <input id="method" list="methods" value="GET" required autocomplete="off">
+                <datalist id="methods"><option>GET</option><option>POST</option><option>DELETE</option><option>HEAD</option><option>UNKNOWN</option></datalist>
+              </div>
+              <div><label for="path">Path and query</label><input id="path" value="/" required spellcheck="false"></div>
+            </div>
+            <label for="headers">Request headers</label>
+            <textarea id="headers" rows="2" placeholder="Content-Type: text/plain" spellcheck="false" aria-describedby="headers-help"></textarea>
+            <small id="headers-help">One header per line. The browser manages Host, Cookie, Content-Length and transfer framing.</small>
+            <fieldset id="body-fields"><legend>Request body</legend>
+              <label for="body-kind">Body format</label>
+              <select id="body-kind"><option value="none">Empty</option><option value="text">Text</option><option value="generated">Repeated bytes</option><option value="file">File</option></select>
+              <div id="text-fields" hidden><label for="body-text">Text to send</label><textarea id="body-text" rows="3"></textarea></div>
+              <div id="size-fields" hidden><label for="byte-count">Number of bytes</label><input id="byte-count" type="number" value="32" min="0" step="1" max="268435456" required><small>Each byte is a lowercase “a”.</small></div>
+              <div id="raw-file-fields" hidden><label for="raw-file">Body file</label><input type="file" id="raw-file"></div>
+              <label for="body-check">Response body check</label>
+              <select id="body-check">
+                <option value="">Inspect only</option>
+                <option value="match">Matches request bytes</option>
+                <option value="upper">Matches request in ASCII uppercase</option>
+                <option value="digit">Repeats the digit in X-Secret-Header-For-Test</option>
+              </select>
+            </fieldset>
+            <label for="expected">Expected status <small>(optional)</small></label>
+            <input id="expected" type="number" min="100" max="599" step="1" placeholder="e.g. 200">
+            <button class="primary" type="submit">Send request</button>
+          </form>
+        </section>
+        <section class="panel" id="files" aria-labelledby="files-title">
+          <h2 id="files-title">Upload and retrieve files</h2>
+          <p class="lead" id="files-note">POST stores the raw file bytes. Use the same name to test duplicate uploads, retrieval and deletion.</p>
+          <form id="upload-form">
+            <label for="upload-file">Local file</label><input type="file" id="upload-file">
+            <label for="remote-name">Filename on the server</label><input id="remote-name" required placeholder="sample.bin">
+            <label for="file-route">Route</label>
+            <select id="file-route"><option value="/uploads/">/uploads/ · read and write</option><option value="/readonly/">/readonly/ · read only</option></select>
+            <div class="file-actions">
+              <button class="primary" value="POST">Upload file</button>
+              <button class="run" value="GET">Retrieve file</button>
+              <button class="run" value="DELETE">Delete file</button>
+            </div>
+          </form>
+          <a id="file-listener-link" href="http://127.0.0.1:8088/manual.html#files" hidden>Open uploads on port 8088</a>
+        </section>
+      </div>
+      <section class="panel inspector" aria-labelledby="response-title">
+        <h2 id="response-title">Last exchange</h2>
+        <p id="status" role="status">Send a request to see its result.</p>
+        <button class="run" id="cancel" hidden>Cancel request</button>
+        <div id="exchange-details" hidden>
+          <h3>Request</h3><pre id="request-info"></pre>
+          <h3>Response headers</h3><pre id="response-info"></pre>
+          <h3>Body preview</h3><pre id="preview"></pre>
+          <a id="download" hidden download="response.bin">Download response body</a>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer>42 Webserv <span>/</span> Local evaluation tools</footer>
+</body>
+</html>

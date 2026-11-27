@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#141414">
+  <title>Quick tests · Webserv</title>
+  <link rel="stylesheet" href="bench.css">
+  <script defer src="official.js"></script>
+  <script defer src="cases.js"></script>
+  <script defer src="bench.js"></script>
+</head>
+<body>
+  <header><div class="bar">
+    <a class="brand" href="http://127.0.0.1:8088/"><b class="mark">42</b> webserv<span>/</span>lab</a>
+    <nav aria-label="Main navigation"><a id="defense-link" aria-current="page" href="http://127.0.0.1:8088/">Quick tests</a><a id="official-link" href="http://127.0.0.1:8080/bench/">Intra tester</a><a href="manual.html">Manual test</a></nav>
+  </div></header>
+  <main>
+    <div class="intro"><div><p class="eyebrow">HTTP / Evaluation console</p><h1>Quick tests<span>.</span></h1>
+      <p id="intro-note">Run a case against Webserv and inspect what came back.</p></div>
+      <button id="run-suite" class="primary" disabled><span aria-hidden="true">▶</span> <b id="suite-label">Run mandatory checks</b></button></div>
+    <noscript>Enable JavaScript to run browser checks.</noscript>
+    <section class="metrics" aria-label="Mandatory browser results">
+      <div><span>Target listener</span><strong id="target">Primary</strong></div>
+      <div><span>Browser cases</span><strong id="total">—</strong></div>
+      <div><span>Passed</span><strong class="pass" id="passed">0</strong></div>
+      <div><span>Failed</span><strong class="fail" id="failed">0</strong></div>
+    </section>
+    <div class="workspace">
+      <aside><p class="eyebrow">Collections</p><nav id="collections" aria-label="Case collections"></nav>
+        <p class="aside-note">Start all test listeners with <code>./sr test/test.conf</code>.</p></aside>
+      <section aria-labelledby="collection-title" class="cases"><div class="section-title"><div><p class="eyebrow" id="category">Mandatory</p><h2 id="collection-title">HTTP basics</h2></div><span id="collection-count"></span></div>
+        <p id="collection-note"></p><div id="file-option" hidden><label for="payload">Upload fixture (optional, up to 2 MiB)</label><input type="file" id="payload"></div>
+        <div id="case-list"></div>
+      </section>
+    </div>
+    <section id="native" class="guide" hidden>
+      <article><h2>Run the supplied binary</h2>
+        <p>In another terminal at the project root, run the command below and follow its prompts. The binary runs the individual cases first, then the four worker stages. Browser results apply only to requests sent by this page.</p>
+        <pre><code>./test/tester http://127.0.0.1:8080</code></pre>
+        <ul>
+          <li>5 workers × 15 requests · GET /</li>
+          <li>20 workers × 5,000 requests · GET /</li>
+          <li>128 workers × 50 requests · labeled GET /directory/nop in this binary; the worker actually requests /</li>
+          <li>20 workers × 5 requests · POST /directory/youpi.bla with 100,000,000 bytes each</li>
+        </ul>
+        <p>The checked-in tester and CGI helper are Linux x86-64 binaries. On another platform use matching builds in <code>test/</code>.</p>
+      </article>
+    </section>
+    <p id="announcement" class="sr-only" role="status"></p>
+  </main>
+  <footer>42 Webserv <span>/</span> Local evaluation tools</footer>
+</body>
+</html>
